@@ -1,21 +1,24 @@
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
+import express from 'express';
+import { createClient } from '@supabase/supabase-js';
 
-app.get('/', (req, res) => {
-  res.send('Vaquinet API is running!');
-});
+const app = express();
+const port = process.env.PORT || 10000;
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 app.get('/cows', async (req, res) => {
-  const { data, error } = await supabase
-    .from('cows')
-    .select('*');
+  const { data, error } = await supabase.from('cows').select('*');
+  
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
 
-  if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-
-app.listen(PORT, () => {
-  console.log(`API running on http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`API running on http://localhost:${port}`);
 });
