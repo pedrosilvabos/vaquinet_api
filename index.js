@@ -1,4 +1,4 @@
-import 'dotenv/config'; 
+import 'dotenv/config';
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 
@@ -12,8 +12,9 @@ const supabase = createClient(
 
 app.get('/cows', async (req, res) => {
   const { data, error } = await supabase.from('cows').select('*');
-  
+
   if (error) {
+    console.error('Supabase error:', error);
     return res.status(500).json({ error: error.message });
   }
 
