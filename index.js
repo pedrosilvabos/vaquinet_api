@@ -23,6 +23,18 @@ app.get('/cows', (req, res) => {
   ]);
 });
 
+app.get('/cows', (req, res) => {
+  const cows = Array.from({ length: 5 }, (_, i) => ({
+    id: `${i}`,
+    name: `Cow ${i}`,
+    temperature: 38.5 + i * 0.2,
+    location: `Pasture ${i + 1}`
+  }));
+
+  res.json(cows);
+});
+
+
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
 });
