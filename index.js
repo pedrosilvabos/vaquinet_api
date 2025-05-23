@@ -22,16 +22,13 @@ app.get('/cows', (req, res) => {
     }
   ]);
 });
+app.get('/cows', async (req, res) => {
+  const { data, error } = await supabase
+    .from('cows')
+    .select('*');
 
-app.get('/cows', (req, res) => {
-  const cows = Array.from({ length: 5 }, (_, i) => ({
-    id: `${i}`,
-    name: `Cow ${i}`,
-    temperature: 38.5 + i * 0.2,
-    location: `Pasture ${i + 1}`
-  }));
-
-  res.json(cows);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 
