@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vaquinet API Tester</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button { margin: 5px 0; display: block; }
+    pre { background: #f4f4f4; padding: 10px; border: 1px solid #ccc; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Vaquinet API Tester</h1>
+
+  <section>
+    <h2>GET /cows</h2>
+    <button onclick="getCows()">Fetch Cows</button>
+    <pre id="cowsOutput">Click to load cows...</pre>
+  </section>
+
+  <section>
+    <h2>POST /cows</h2>
+    <input type="text" id="cowName" placeholder="Name" />
+    <input type="number" id="cowAge" placeholder="Age" />
+    <input type="text" id="cowBreed" placeholder="Breed" />
+    <input type="number" step="0.1" id="cowWeight" placeholder="Weight" />
+    <button onclick="addCow()">Add Cow</button>
+    <pre id="addOutput"></pre>
+  </section>
+
+  <section>
+    <h2>DELETE /cows/:id</h2>
+    <input type="number" id="deleteId" placeholder="Cow ID to delete" />
+    <button onclick="deleteCow()">Delete Cow</button>
+    <pre id="deleteOutput"></pre>
+  </section>
+
+  <script>
+    const API_URL = 'http://localhost:10000';
+
+    async function getCows() {
+      const res = await fetch(`${API_URL}/cows`);
+      const data = await res.json();
+      document.getElementById('cowsOutput').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function addCow() {
+      const cow = {
+        name: document.getElementById('cowName').value,
+        age: Number(document.getElementById('cowAge').value),
+        breed: document.getElementById('cowBreed').value,
+        weight: parseFloat(document.getElementById('cowWeight').value)
+      };
+
+      const res = await fetch(`${API_URL}/cows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cow)
+      });
+
+      const data = await res.json();
+      document.getElementById('addOutput').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function deleteCow() {
+      const id = document.getElementById('deleteId').value;
+      const res = await fetch(`${API_URL}/cows/${id}`, { method: 'DELETE' });
+
+      if (res.status === 204) {
+        document.getElementById('deleteOutput').textContent = `Cow with ID ${id} deleted.`;
+      } else {
+        const err = await res.json();
+        document.getElementById('deleteOutput').textContent = JSON.stringify(err, null, 2);
+      }
+    }
+  </script>
+</body>
+</html>
