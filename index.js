@@ -52,11 +52,24 @@ app.get('/cows/:id', async (req, res) => {
 
 // 🐮 Create a new cow
 app.post('/cows', async (req, res) => {
+  console.log('Incoming cow data:', req.body); // 👈 Log this
+
   const cowData = req.body;
-  const { data, error } = await supabase.from('cows').insert([cowData]).select().single();
+
+  if (!cowData.name) {
+    return res.status(400).json({ error: 'Missing name in request' });
+  }
+
+  const { data, error } = await supabase
+    .from('cows')
+    .insert([cowData])
+    .select()
+    .single();
+
   if (error) return res.status(400).json({ error: error.message });
   res.status(201).json(data);
 });
+
 
 // 🐮 Update a cow by ID
 app.put('/cows/:id', async (req, res) => {
@@ -76,6 +89,6 @@ app.delete('/cows/:id', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`API running on http://localhost:${port}`);
+
 });
  
