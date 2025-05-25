@@ -7,10 +7,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const app = express();
+app.use(express.json()); // Required to parse JSON body
 const port = process.env.PORT || 10001;
 
 app.use(cors());
-app.use(express.json()); // Required to parse JSON body
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,12 +33,22 @@ app.get('/', (req, res) => {
 
 // 🐮 Get all cows
 app.get('/cows', async (req, res) => {
+  console.log('Fetching cows from Supabase...');
   try {
     const { data, error } = await supabase.from('cows').select('*');
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error('Supabase error:', error);
+      return res.status(500).json({ error: 'Supabase query failed', details: error });
+    }
+    if (!data || data.length === 0) {
+      console.log('No data returned');
+      return res.status(200).json({ message: 'No data found', data: [] });
+    }
+    console.log('Data fetched:', data);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: 'Server error', details: err.message });
+    console.error('Unexpected error:', err);
+    res.status(500).json({ error: 'Unexpected server error', details: err.message });
   }
 });
 
@@ -89,6 +99,6 @@ app.delete('/cows/:id', async (req, res) => {
 });
 
 app.listen(port, () => {
-
+  console.log(`API running on http://localhost:${port}`);
 });
  
