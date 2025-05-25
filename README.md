@@ -1,93 +1,143 @@
-=======================================
-🐄 Vaquinet API Documentation
-=======================================
+Vaquinet Cows API Documentation
 
-Overview
---------
-This API provides access to cow-related data stored in a Supabase database.
-It is designed to be lightweight and suitable for integration with IoT and mobile apps.
+Base URL: https://nzavorpoosmaonbevcmb.supabase.co/rest/v1
+Note: This API uses Supabase PostgREST by default, so REST URLs are under /rest/v1.
+The HTML client uses Supabase JS client to interact directly.
 
-Base URL (Local): http://localhost:10000
-Base URL (Deployed): (replace with your Render URL)
-Format: JSON
-Authentication: Uses Supabase anon key internally. No external token required for public endpoints.
+---
 
+Authentication
+
+- Use the SUPABASE_ANON_KEY as Bearer token in the Authorization header for REST requests.
+- The client-side JS uses the anon key for safe access.
+
+---
+
+Table: cows
+
+Field       | Type      | Required | Description
+------------|-----------|----------|---------------------------
+id          | integer   | Auto     | Unique cow identifier
+name        | text      | Yes      | Cow's name
+temperature | numeric   | Yes      | Cow's body temperature
+location    | text      | Yes      | Cow's current location
+created_at  | timestamp | Yes      | Record creation timestamp
+
+---
 
 Endpoints
----------
 
+1. Get all cows
+
+Request:
 GET /cows
----------
-Returns all cows stored in the database.
+Authorization: Bearer <SUPABASE_ANON_KEY>
 
-URL: /cows
-Method: GET
-Auth required: No
-Query Params: None
-
-Example Request:
-----------------
-GET /cows HTTP/1.1
-Host: localhost:10000
-
-Example Response:
------------------
+Response Example:
 [
   {
     "id": 1,
-    "name": "Bessie",
-    "location": "Pasture A",
-    "status": "healthy"
+    "name": "FLORIBELA",
+    "temperature": 38.5,
+    "location": "Pasture 1",
+    "created_at": "2025-05-23T13:19:50.670968+00:00"
   },
   {
     "id": 2,
-    "name": "Daisy",
-    "location": "Pasture B",
-    "status": "injured"
+    "name": "BELA VISTA",
+    "temperature": 39.1,
+    "location": "Stable 2",
+    "created_at": "2025-05-24T09:00:00.000000+00:00"
   }
 ]
 
-Error Response:
----------------
+---
+
+2. Add a new cow
+
+Request:
+POST /cows
+Authorization: Bearer <SUPABASE_ANON_KEY>
+Content-Type: application/json
+
 {
-  "error": "Supabase query failed message"
+  "name": "FLORIBELA",
+  "temperature": 38.5,
+  "location": "Pasture 1",
+  "created_at": "2025-05-23T13:19:50.670968+00:00"
 }
 
+Response Example:
+{
+  "id": 3,
+  "name": "FLORIBELA",
+  "temperature": 38.5,
+  "location": "Pasture 1",
+  "created_at": "2025-05-23T13:19:50.670968+00:00"
+}
 
-Environment Variables
----------------------
-To run the API, set the following in a `.env` file or Render's environment variables panel:
+Notes:
+- name, temperature, and location are required fields.
+- created_at can be omitted, and the server will assign the current timestamp.
 
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-PORT=10000
+---
 
+3. Delete a cow by ID
 
-Running the API
----------------
+Request:
+DELETE /cows?id=eq.3
+Authorization: Bearer <SUPABASE_ANON_KEY>
 
-Locally:
---------
-1. Clone the repo
-2. Run `npm install`
-3. Create a `.env` file with the correct Supabase keys
-4. Start the server:
+Or
 
-   node index.js
+DELETE /cows/3
+Authorization: Bearer <SUPABASE_ANON_KEY>
 
-On Render:
-----------
-- Set environment variables via the Render dashboard.
-- Make sure your `package.json` includes:
-  {
-    "type": "module"
-  }
+Response:
+204 No Content on success
 
+Example:
+Cow with ID 3 deleted.
+
+---
+
+JavaScript (Supabase client) usage examples
+
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = 'https://nzavorpoosmaonbevcmb.supabase.co/';
+const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Fetch cows
+const { data: cows, error } = await supabase.from('cows').select('*');
+if (error) console.error(error);
+else console.log(cows);
+
+// Add cow
+const { data, error: insertError } = await supabase
+  .from('cows')
+  .insert([{ name: 'FLORIBELA', temperature: 38.5, location: 'Pasture 1' }])
+  .select()
+  .single();
+if (insertError) console.error(insertError);
+else console.log('Added cow:', data);
+
+// Delete cow
+const { error: deleteError } = await supabase
+  .from('cows')
+  .delete()
+  .eq('id', 3);
+if (deleteError) console.error(deleteError);
+else console.log('Deleted cow with ID 3');
+
+---
 
 Notes
------
-- Supabase table name must be exactly `cows`.
-- Ensure that the table is marked as publicly readable via Supabase RLS or security policies.
-- This is a read-only API for now; POST/PUT/DELETE endpoints can be added later.
 
-=======================================
+- Make sure your Supabase table 'cows' has columns matching the API.
+- The anon key allows read/write access depending on your Supabase Row Level Security (RLS) policies.
+- Use the Supabase JS client in browser or Node.js for easy integration.
+- For REST direct requests, always send Authorization: Bearer <anon_key> header.
+
+---
