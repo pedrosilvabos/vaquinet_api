@@ -5,6 +5,7 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mqtt from 'mqtt';
 
 const app = express();
 app.use(express.json()); // Required to parse JSON body
@@ -13,12 +14,22 @@ const port = process.env.PORT || 10001;
 app.use(cors());
 
 
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Serve static files from /public
 app.use(express.static(path.join(__dirname, 'public')));
+const mqttClient = mqtt.connect('mqtt:///vakinet-mqtt.onrender.com:1883');
 
+// Handle connection
+mqttClient.on('connect', () => {
+  console.log('✅ MQTT connected');
+});
+
+mqttClient.on('error', (err) => {
+  console.error('❌ MQTT connection error:', err);
+});
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -45,6 +56,7 @@ app.get('/cows', async (req, res) => {
       return res.status(200).json({ message: 'No data found', data: [] });
     }
     console.log('Data fetched:', data);
+      mqttClient.publish('cows/', JSON.stringify(data));
     res.json(data);
   } catch (err) {
     console.error('Unexpected error:', err);
@@ -57,13 +69,12 @@ app.get('/cows/:id', async (req, res) => {
   const id = req.params.id;
   const { data, error } = await supabase.from('cows').select('*').eq('id', id).single();
   if (error) return res.status(404).json({ error: 'Cow not found', details: error.message });
+    mqttClient.publish('cows/details', JSON.stringify(data));
   res.json(data);
 });
 
 // 🐮 Create a new cow
 app.post('/cows', async (req, res) => {
-  console.log('Incoming cow data:', req.body); // 👈 Log this
-
   const cowData = req.body;
 
   if (!cowData.name) {
@@ -77,8 +88,12 @@ app.post('/cows', async (req, res) => {
     .single();
 
   if (error) return res.status(400).json({ error: error.message });
+
+  mqttClient.publish('cows/new', JSON.stringify(data));
+
   res.status(201).json(data);
 });
+
 
 
 // 🐮 Update a cow by ID
@@ -87,6 +102,9 @@ app.put('/cows/:id', async (req, res) => {
   const updates = req.body;
   const { data, error } = await supabase.from('cows').update(updates).eq('id', id).select().single();
   if (error) return res.status(400).json({ error: error.message });
+
+    mqttClient.publish('cows/update', JSON.stringify(data));
+
   res.json(data);
 });
 
@@ -95,6 +113,9 @@ app.delete('/cows/:id', async (req, res) => {
   const id = req.params.id;
   const { error } = await supabase.from('cows').delete().eq('id', id);
   if (error) return res.status(400).json({ error: error.message });
+
+    mqttClient.publish('cows/delete', JSON.stringify(data));
+
   res.status(204).send(); // No Content
 });
 
