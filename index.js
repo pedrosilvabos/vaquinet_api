@@ -20,12 +20,28 @@ const __dirname = path.dirname(__filename);
 
 // Serve static files from /public
 app.use(express.static(path.join(__dirname, 'public')));
-const mqttClient = mqtt.connect('mqtt:///vakinet-mqtt.onrender.com:1883');
+const mqttClient = mqtt.connect('mqtt:///vakinetmqtt.onrender.com');
 
 // Handle connection
 mqttClient.on('connect', () => {
   console.log('✅ MQTT connected');
+
+  // Subscribe to all cow-related topics
+  mqttClient.subscribe('cows/#', (err) => {
+    if (err) {
+      console.error('❌ MQTT subscription error:', err);
+    } else {
+      console.log('📡 Subscribed to cows/#');
+    }
+  });
 });
+
+// Log incoming MQTT messages
+mqttClient.on('message', (topic, message) => {
+  console.log(`📥 MQTT Message on topic "${topic}": ${message.toString()}`);
+});
+
+
 
 mqttClient.on('error', (err) => {
   console.error('❌ MQTT connection error:', err);
@@ -123,7 +139,15 @@ app.delete('/cows/:id', async (req, res) => {
 });
 
 
-app.listen(port, () => {
-  console.log(`API running on http://localhost:${port}`);
-});
- 
+app.listen(port)
+  .on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use. Please free the port or use another one.`);
+    } else {
+      console.error(err);
+    }
+    process.exit(1);
+  })
+  .on('listening', () => {
+    console.log(`🚀 API running on http://localhost:${port}`);
+  });
