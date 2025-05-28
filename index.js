@@ -112,12 +112,16 @@ app.put('/cows/:id', async (req, res) => {
 app.delete('/cows/:id', async (req, res) => {
   const id = req.params.id;
   const { error } = await supabase.from('cows').delete().eq('id', id);
-  if (error) return res.status(400).json({ error: error.message });
 
-    mqttClient.publish('cows/delete', JSON.stringify(data));
+  const success = !error;
+
+  mqttClient.publish('cows/delete', JSON.stringify({ success, id }));
+
+  if (error) return res.status(400).json({ error: error.message });
 
   res.status(204).send(); // No Content
 });
+
 
 app.listen(port, () => {
   console.log(`API running on http://localhost:${port}`);
