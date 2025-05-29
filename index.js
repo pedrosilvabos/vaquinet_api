@@ -56,22 +56,37 @@ mqttClient.on('message', async (topic, message) => {
 
   // Example: if sensor data indicates abnormal temperature, generate alert
   try {
-    if (topic.startsWith('cows/') && topic.includes('sensor')) {
-      const payload = JSON.parse(msgStr);
+  if (topic.startsWith('cows/')) {
+  const payload = JSON.parse(msgStr);
 
-      // Assume payload has { temperature, cowId }
-      if (payload.temperature && (payload.temperature > 39 || payload.temperature < 36)) {
-        const alert = {
-          cowId: payload.cowId || 'unknown',
-          type: 'temperature',
-          value: payload.temperature,
-          message: `Abnormal temperature detected: ${payload.temperature}°C`,
-          timestamp: new Date().toISOString(),
-        };
-        alerts.push(alert);
-        console.log('🚨 Alert generated:', alert);
+  // Check if payload is an array
+  if (Array.isArray(payload)) {
+  payload.forEach(async (cow) => {
+    if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
+      const alert = {
+        cow_id: cow.id,
+        name: cow.name,
+        type: 'temperature',
+        value: cow.temperature,
+        message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
+        location: cow.location,
+        latitude: cow.latitude,
+        longitude: cow.longitude,
+        timestamp: new Date().toISOString()
+      };
+
+      // Insert into Supabase
+      const { error } = await supabase.from('alerts').insert(alert);
+      if (error) {
+        console.error('❌ Error inserting alert:', error.message);
+      } else {
+        console.log('🚨 Alert saved to Supabase:', alert);
       }
     }
+  });
+}
+}
+
   } catch (err) {
     console.error('Error processing MQTT message:', err);
   }
@@ -104,7 +119,7 @@ app.get('/cows', async (req, res) => {
       return res.status(200).json({ message: 'No data found', data: [] });
     }
     console.log('Data fetched:', data);
-    mqttClient.publish('cows/', JSON.stringify(data));
+  //  mqttClient.publish('cows/', JSON.stringify(data));
     res.json(data);
   } catch (err) {
     console.error('Unexpected error:', err);
@@ -268,4 +283,39 @@ app.listen(port)
   })
   .on('listening', () => {
     console.log(`🚀 Server listening on http://localhost:${port}`);
-  });
+  })
+  .on('message', async (topic, message) => {
+  if (topic.startsWith('cows/')) {
+    try {
+      const msgStr = message.toString();
+      const payload = JSON.parse(msgStr);
+
+      if (Array.isArray(payload)) {
+        payload.forEach(async (cow) => {
+          if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
+            const alert = {
+              cow_id: cow.id,
+              name: cow.name,
+              type: 'temperature',
+              value: cow.temperature,
+              message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
+              location: cow.location,
+              latitude: cow.latitude,
+              longitude: cow.longitude,
+              timestamp: new Date().toISOString()
+            };
+
+            const { error } = await supabase.from('alerts').insert(alert);
+            if (error) {
+              console.error('❌ Error inserting alert:', error.message);
+            } else {
+              console.log('🚨 Alert saved to Supabase:', alert);
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error('❌ Failed to parse MQTT message:', err.message);
+    }
+  }
+});
