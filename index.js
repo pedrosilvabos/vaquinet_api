@@ -20,8 +20,10 @@ const __dirname = path.dirname(__filename);
 
 // Serve static files from /public
 app.use(express.static(path.join(__dirname, 'public')));
-const mqttClient = mqtt.connect('mqtt:///vakinetmqtt.onrender.com');
-
+const mqttClient = mqtt.connect('mqtts://728ab5952b9d48ab9865b395f89aec0f.s1.eu.hivemq.cloud:8883', {
+  username: 'vakinet',
+  password: 'Vakinet1',
+});
 // Handle connection
 mqttClient.on('connect', () => {
   console.log('✅ MQTT connected');
