@@ -48,6 +48,32 @@ mqttClient.on('connect', () => {
     }
   });
 });
+// Endpoint to receive sensor data from ESP devices and publish to MQTT
+app.post('/esp/data', async (req, res) => {
+  const sensorData = req.body;
+
+  if (!sensorData) {
+    return res.status(400).json({ error: 'Missing sensor data in request body' });
+  }
+
+  try {
+    // Convert the incoming JSON sensor data to string for MQTT publish
+    const payload = JSON.stringify(sensorData);
+
+    // Publish to the MQTT topic you want (e.g. cows/sensors)
+    mqttClient.publish('cows/sensors', payload, (err) => {
+      if (err) {
+        console.error('❌ MQTT publish error:', err);
+        return res.status(500).json({ error: 'Failed to publish MQTT message' });
+      }
+      console.log('✅ Sensor data published to MQTT:', payload);
+      res.status(200).json({ message: 'Data received and published to MQTT' });
+    });
+  } catch (err) {
+    console.error('❌ Error processing sensor data:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // MQTT message handler - process messages and create alerts based on simple rules
 mqttClient.on('message', async (topic, message) => {
@@ -129,51 +155,83 @@ app.get('/cows', async (req, res) => {
 
 // Get one cow by ID
 app.get('/cows/:id', async (req, res) => {
-  const id = req.params.id;
-  const { data, error } = await supabase.from('cows').select('*').eq('id', id).single();
-  if (error) return res.status(404).json({ error: 'Cow not found', details: error.message });
-  mqttClient.publish('cows/details', JSON.stringify(data));
-  res.json(data);
+  const { id } = req.params;
+
+  const { data: cow, error } = await supabase
+    .from('cows')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching cow:', error.message);
+    return res.status(404).json({ error: 'Cow not found', details: error.message });
+  }
+
+  console.log('Fetched cow details:', cow);
+
+  // Publish only this cow’s data
+  mqttClient.publish('cows/details', JSON.stringify(cow));
+
+  res.json(cow);
 });
+
 
 // Create a new cow
 app.post('/cows', async (req, res) => {
   const cowData = req.body;
-  if (!cowData.name) {
-    return res.status(400).json({ error: 'Missing name in request' });
-  }
+  if (!cowData.name) return res.status(400).json({ error: 'Missing name in request' });
+
   const { data, error } = await supabase
     .from('cows')
     .insert([cowData])
     .select()
     .single();
+
   if (error) return res.status(400).json({ error: error.message });
+
   mqttClient.publish('cows/new', JSON.stringify(data));
+  await publishCowList();
   await auditLog('create_cow', data);
   res.status(201).json(data);
 });
 
+
 // Update a cow by ID
 app.put('/cows/:id', async (req, res) => {
-  const id = req.params.id;
+  const { id } = req.params;
   const updates = req.body;
-  const { data, error } = await supabase.from('cows').update(updates).eq('id', id).select().single();
+
+  const { data, error } = await supabase
+    .from('cows')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
   if (error) return res.status(400).json({ error: error.message });
+
   mqttClient.publish('cows/update', JSON.stringify(data));
+  await publishCowList();
   await auditLog('update_cow', { id, updates });
   res.json(data);
 });
 
-// Delete a cow by ID
+//delete a cow by ID
 app.delete('/cows/:id', async (req, res) => {
-  const id = req.params.id;
+  const { id } = req.params;
   const { error } = await supabase.from('cows').delete().eq('id', id);
+
   const success = !error;
   mqttClient.publish('cows/delete', JSON.stringify({ success, id }));
+
   if (error) return res.status(400).json({ error: error.message });
+
+  await publishCowList();
   await auditLog('delete_cow', { id });
   res.status(204).send();
 });
+
 
 // --- New Endpoint: Get Alerts ---
 app.get('/alerts', (req, res) => {
@@ -318,4 +376,15 @@ app.listen(port)
       console.error('❌ Failed to parse MQTT message:', err.message);
     }
   }
-});
+async function publishCowList() {
+  const { data: allCows, error } = await supabase.from('cows').select('*');
+  if (!error) {
+    mqttClient.publish('cows/all', JSON.stringify(allCows));
+  } else {
+    console.error('Failed to fetch all cows for MQTT publish:', error.message);
+  }
+}
+
+}
+
+);
