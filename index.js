@@ -31,6 +31,12 @@ async function auditLog(action, data) {
   console.log(`[AUDIT] Action: ${action}`, data);
   // Could insert into a DB table for persistence
 }
+//get alerts from Supabase
+app.get('/alerts', async (req, res) => {
+  const { data, error } = await supabase.from('alerts').select('*');
+  if (error) return res.status(500).json({ error: 'Failed to fetch alerts', details: error });
+  res.json(data);
+});
 
 // --- MQTT Setup ---
 const mqttClient = mqtt.connect('mqtts://728ab5952b9d48ab9865b395f89aec0f.s1.eu.hivemq.cloud:8883', {
@@ -48,32 +54,69 @@ mqttClient.on('connect', () => {
     }
   });
 });
+
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
-  const sensorData = req.body;
+  const {
+    cowId,
+    accel,
+    gyro,
+    mag,
+    pitch,
+    roll,
+    latitude,
+    longitude,
+    timestamp
+  } = req.body;
 
-  if (!sensorData) {
-    return res.status(400).json({ error: 'Missing sensor data in request body' });
+  if (!cowId) {
+    return res.status(400).json({ error: 'Missing cowId' });
   }
+
+  const sensorData = {
+    cow_id: cowId,
+    accel,
+    gyro,
+    mag,
+    pitch,
+    roll,
+    timestamp: timestamp || new Date().toISOString()
+  };
 
   try {
-    // Convert the incoming JSON sensor data to string for MQTT publish
-    const payload = JSON.stringify(sensorData);
+    // Store sensor reading
+    const { error: insertError } = await supabase
+      .from('sensor_data')
+      .insert([sensorData]);
 
-    // Publish to the MQTT topic you want (e.g. cows/sensors)
-    mqttClient.publish('cows/sensors', payload, (err) => {
-      if (err) {
-        console.error('❌ MQTT publish error:', err);
-        return res.status(500).json({ error: 'Failed to publish MQTT message' });
+    if (insertError) {
+      return res.status(500).json({ error: 'Failed to insert sensor data', details: insertError.message });
+    }
+
+    // If GPS data is present, update cow's location
+    if (latitude && longitude) {
+      const { error: updateError } = await supabase
+        .from('cows')
+        .update({ latitude, longitude })
+        .eq('id', cowId);
+
+      if (updateError) {
+        console.error('Failed to update GPS location:', updateError.message);
+      } else {
+        mqttClient.publish(`cows/${cowId}/location`, JSON.stringify({ latitude, longitude }));
       }
-      console.log('✅ Sensor data published to MQTT:', payload);
-      res.status(200).json({ message: 'Data received and published to MQTT' });
-    });
+    }
+
+    mqttClient.publish(`cows/${cowId}/data`, JSON.stringify(sensorData));
+    await auditLog('sensor_data_received', { cowId, hasGPS: !!latitude });
+
+    res.json({ message: 'Data received' });
   } catch (err) {
-    console.error('❌ Error processing sensor data:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Unexpected error:', err);
+    res.status(500).json({ error: 'Unexpected error', details: err.message });
   }
 });
+
 
 // MQTT message handler - process messages and create alerts based on simple rules
 mqttClient.on('message', async (topic, message) => {
