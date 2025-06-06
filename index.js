@@ -136,7 +136,7 @@ app.post('/esp/data', async (req, res) => {
   }
 
   try {
-    const topic = `cows/${sensorData.id || 'unknown'}/data`; // Optional: dynamic topic per cow/device
+    const topic = `cows/sensor/data`; // Optional: dynamic topic per cow/device
     const payload = JSON.stringify(sensorData);
 
     mqttClient.publish(topic, payload, (err) => {
