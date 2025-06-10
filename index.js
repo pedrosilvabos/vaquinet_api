@@ -60,31 +60,31 @@ mqttClient.on('message', async (topic, message) => {
   const payload = JSON.parse(msgStr);
 
   // Check if payload is an array
-  if (Array.isArray(payload)) {
-  payload.forEach(async (cow) => {
-    if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
-      const alert = {
-        cow_id: cow.id,
-        name: cow.name,
-        type: 'temperature',
-        value: cow.temperature,
-        message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
-        location: cow.location,
-        latitude: cow.latitude,
-        longitude: cow.longitude,
-        timestamp: new Date().toISOString()
-      };
+//   if (Array.isArray(payload)) {
+//   payload.forEach(async (cow) => {
+//     if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
+//       const alert = {
+//         cow_id: cow.id,
+//         name: cow.name,
+//         type: 'temperature',
+//         value: cow.temperature,
+//         message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
+//         location: cow.location,
+//         latitude: cow.latitude,
+//         longitude: cow.longitude,
+//         timestamp: new Date().toISOString()
+//       };
 
-      // Insert into Supabase
-      const { error } = await supabase.from('alerts').insert(alert);
-      if (error) {
-        console.error('❌ Error inserting alert:', error.message);
-      } else {
-        console.log('🚨 Alert saved to Supabase:', alert);
-      }
-    }
-  });
-}
+//       // Insert into Supabase
+//       const { error } = await supabase.from('alerts').insert(alert);
+//       if (error) {
+//         console.error('❌ Error inserting alert:', error.message);
+//       } else {
+//         console.log('🚨 Alert saved to Supabase:', alert);
+//       }
+//     }
+//   });
+// }
 }
 
   } catch (err) {
