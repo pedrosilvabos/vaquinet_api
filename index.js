@@ -161,10 +161,10 @@ app.delete('/cows/:id', async (req, res) => {
 app.post('/esp/data', async (req, res) => {
   let sensorData = req.body;
 
-  if (!Array.isArray(sensorData) || sensorData.length === 0 || !sensorData[0]) {
-    console.warn('⚠️ Invalid or empty sensor data array');
-    return res.status(400).json({ error: 'Expected non-empty array with one object' });
-  }
+  // if (!Array.isArray(sensorData) || sensorData.length === 0 || !sensorData[0]) {
+  //   console.warn('⚠️ Invalid or empty sensor data array');
+  //   return res.status(400).json({ error: 'Expected non-empty array with one object' });
+  // }
 
   const single = sensorData[0];
   if (typeof single !== 'object' || single === null) {
