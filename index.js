@@ -159,19 +159,20 @@ app.delete('/cows/:id', async (req, res) => {
 });
 
 app.post('/esp/data', async (req, res) => {
-  const sensorData = req.body;
+  let sensorData = req.body;
 
-  if (
-    !sensorData ||
-    (Array.isArray(sensorData) && sensorData.some((item) => item === null || typeof item !== 'object')) ||
-    (typeof sensorData === 'object' && Object.keys(sensorData).length === 0)
-  ) {
-    console.warn('⚠️ Invalid or empty sensor data received, skipping MQTT publish');
-    return res.status(400).json({ error: 'Invalid or empty sensor data' });
+  if (!Array.isArray(sensorData) || sensorData.length === 0 || !sensorData[0]) {
+    console.warn('⚠️ Invalid or empty sensor data array');
+    return res.status(400).json({ error: 'Expected non-empty array with one object' });
+  }
+
+  const single = sensorData[0];
+  if (typeof single !== 'object' || single === null) {
+    return res.status(400).json({ error: 'Malformed object in sensor array' });
   }
 
   try {
-    const payload = JSON.stringify(sensorData);
+    const payload = JSON.stringify(sensorData); // keep it in array if MQTT expects it
     mqttClient.publish('cows/sensors', payload, (err) => {
       if (err) {
         console.error('❌ MQTT publish error:', err);
@@ -181,7 +182,7 @@ app.post('/esp/data', async (req, res) => {
       res.status(200).json({ message: 'Data received and published to MQTT' });
     });
   } catch (err) {
-    console.error('❌ Error processing sensor data:', err);
+    console.error('❌ Error handling /esp/data:', err);
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
