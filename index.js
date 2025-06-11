@@ -160,18 +160,32 @@ app.delete('/cows/:id', async (req, res) => {
 
 app.post('/esp/data', async (req, res) => {
   const sensorData = req.body;
-  if (!sensorData) return res.status(400).json({ error: 'Missing sensor data' });
 
-  const payload = JSON.stringify(sensorData);
-  mqttClient.publish('cows/sensors', payload, (err) => {
-    if (err) {
-      console.error('❌ MQTT publish error:', err);
-      return res.status(500).json({ error: 'Failed to publish MQTT message' });
-    }
-    console.log('✅ Sensor data published to MQTT:', payload);
-    res.status(200).json({ message: 'Data received and published to MQTT' });
-  });
+  if (
+    !sensorData ||
+    (Array.isArray(sensorData) && sensorData.some((item) => item === null || typeof item !== 'object')) ||
+    (typeof sensorData === 'object' && Object.keys(sensorData).length === 0)
+  ) {
+    console.warn('⚠️ Invalid or empty sensor data received, skipping MQTT publish');
+    return res.status(400).json({ error: 'Invalid or empty sensor data' });
+  }
+
+  try {
+    const payload = JSON.stringify(sensorData);
+    mqttClient.publish('cows/sensors', payload, (err) => {
+      if (err) {
+        console.error('❌ MQTT publish error:', err);
+        return res.status(500).json({ error: 'Failed to publish MQTT message' });
+      }
+      console.log('✅ Sensor data published to MQTT:', payload);
+      res.status(200).json({ message: 'Data received and published to MQTT' });
+    });
+  } catch (err) {
+    console.error('❌ Error processing sensor data:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
 });
+
 
 app.get('/alerts', (req, res) => {
   res.json(alerts);
