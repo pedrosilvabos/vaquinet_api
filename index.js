@@ -93,10 +93,10 @@ mqttClient.on('connect', () => {
 // // }
 // }
 
-  } catch (err) {
-    console.error('Error processing MQTT message:', err);
-  }
-});
+//   } catch (err) {
+//     console.error('Error processing MQTT message:', err);
+//   }
+// });
 
 mqttClient.on('error', (err) => {
   console.error('❌ MQTT connection error:', err);
