@@ -202,17 +202,32 @@ app.put('/cows/:id', async (req, res) => {
 
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
-  const sensorData = req.body;
+  let sensorData = req.body;
 
   if (!sensorData) {
     return res.status(400).json({ error: 'Missing sensor data in request body' });
   }
 
-  try {
-    // Convert the incoming JSON sensor data to string for MQTT publish
-    const payload = JSON.stringify(sensorData);
+  // Ensure it's always treated as an array
+  if (!Array.isArray(sensorData)) {
+    sensorData = [sensorData];
+  }
 
-    // Publish to the MQTT topic you want (e.g. cows/sensors)
+  // Filter out invalid/null objects
+  const validData = sensorData.filter(
+    (entry) =>
+      entry &&
+      typeof entry === 'object' &&
+      entry.deviceId &&
+      typeof entry.value !== 'undefined'
+  );
+
+  if (validData.length === 0) {
+    return res.status(400).json({ error: 'No valid sensor entries in request' });
+  }
+
+  try {
+    const payload = JSON.stringify(validData);
     mqttClient.publish('cows/sensors', payload, (err) => {
       if (err) {
         console.error('❌ MQTT publish error:', err);
@@ -226,6 +241,7 @@ app.post('/esp/data', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 
 //delete a cow by ID
