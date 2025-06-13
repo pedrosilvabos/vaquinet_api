@@ -211,7 +211,9 @@ app.post('/esp/data', async (req, res) => {
   try {
     // Convert the incoming JSON sensor data to string for MQTT publish
     const payload = JSON.stringify(sensorData);
-
+if(payload == null || payload == undefined || payload == '') {
+     return;
+    }
     // Publish to the MQTT topic you want (e.g. cows/sensors)
     mqttClient.publish('cows/sensors', payload, (err) => {
       if (err) {
