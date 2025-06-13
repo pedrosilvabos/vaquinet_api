@@ -49,49 +49,49 @@ mqttClient.on('connect', () => {
   });
 });
 
-// MQTT message handler - process messages and create alerts based on simple rules
-mqttClient.on('message', async (topic, message) => {
-  const msgStr = message.toString();
-  console.log(`📥 MQTT Message on topic "${topic}": ${msgStr}`);
+// // MQTT message handler - process messages and create alerts based on simple rules
+// mqttClient.on('message', async (topic, message) => {
+//   const msgStr = message.toString();
+//   console.log(`📥 MQTT Message on topic "${topic}": ${msgStr}`);
 
-  // Example: if sensor data indicates abnormal temperature, generate alert
-  try {
-  if (topic.startsWith('cows/')) {
-  const payload = JSON.parse(msgStr);
-  if (Array.isArray(payload)) {
-  payload.forEach(async (cow) => {
-    if (!cow || typeof cow !== 'object') return; // Skip null or invalid items
-    // process cow...
-  });
-}
-
-  // Check if payload is an array
+//   // Example: if sensor data indicates abnormal temperature, generate alert
+//   try {
+//   if (topic.startsWith('cows/')) {
+//   const payload = JSON.parse(msgStr);
 //   if (Array.isArray(payload)) {
 //   payload.forEach(async (cow) => {
-//     if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
-//       const alert = {
-//         cow_id: cow.id,
-//         name: cow.name,
-//         type: 'temperature',
-//         value: cow.temperature,
-//         message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
-//         location: cow.location,
-//         latitude: cow.latitude,
-//         longitude: cow.longitude,
-//         timestamp: new Date().toISOString()
-//       };
-
-//       // Insert into Supabase
-//       const { error } = await supabase.from('alerts').insert(alert);
-//       if (error) {
-//         console.error('❌ Error inserting alert:', error.message);
-//       } else {
-//         console.log('🚨 Alert saved to Supabase:', alert);
-//       }
-//     }
+//     if (!cow || typeof cow !== 'object') return; // Skip null or invalid items
+//     // process cow...
 //   });
 // }
-}
+
+//   // Check if payload is an array
+// //   if (Array.isArray(payload)) {
+// //   payload.forEach(async (cow) => {
+// //     if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
+// //       const alert = {
+// //         cow_id: cow.id,
+// //         name: cow.name,
+// //         type: 'temperature',
+// //         value: cow.temperature,
+// //         message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
+// //         location: cow.location,
+// //         latitude: cow.latitude,
+// //         longitude: cow.longitude,
+// //         timestamp: new Date().toISOString()
+// //       };
+
+// //       // Insert into Supabase
+// //       const { error } = await supabase.from('alerts').insert(alert);
+// //       if (error) {
+// //         console.error('❌ Error inserting alert:', error.message);
+// //       } else {
+// //         console.log('🚨 Alert saved to Supabase:', alert);
+// //       }
+// //     }
+// //   });
+// // }
+// }
 
   } catch (err) {
     console.error('Error processing MQTT message:', err);
@@ -211,9 +211,7 @@ app.post('/esp/data', async (req, res) => {
   try {
     // Convert the incoming JSON sensor data to string for MQTT publish
     const payload = JSON.stringify(sensorData);
-if(payload == null || payload == undefined || payload == '') {
-     return;
-    }
+
     // Publish to the MQTT topic you want (e.g. cows/sensors)
     mqttClient.publish('cows/sensors', payload, (err) => {
       if (err) {
