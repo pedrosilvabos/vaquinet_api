@@ -202,32 +202,17 @@ app.put('/cows/:id', async (req, res) => {
 
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
-  let sensorData = req.body;
+  const sensorData = req.body;
 
   if (!sensorData) {
     return res.status(400).json({ error: 'Missing sensor data in request body' });
   }
 
-  // Ensure it's always treated as an array
-  if (!Array.isArray(sensorData)) {
-    sensorData = [sensorData];
-  }
-
-  // Filter out invalid/null objects
-  const validData = sensorData.filter(
-    (entry) =>
-      entry &&
-      typeof entry === 'object' &&
-      entry.deviceId &&
-      typeof entry.value !== 'undefined'
-  );
-
-  if (validData.length === 0) {
-    return res.status(400).json({ error: 'No valid sensor entries in request' });
-  }
-
   try {
-    const payload = JSON.stringify(validData);
+    // Convert the incoming JSON sensor data to string for MQTT publish
+    const payload = JSON.stringify(sensorData);
+
+    // Publish to the MQTT topic you want (e.g. cows/sensors)
     mqttClient.publish('cows/sensors', payload, (err) => {
       if (err) {
         console.error('❌ MQTT publish error:', err);
@@ -358,7 +343,7 @@ app.get('/docs', (req, res) => {
 });
 
 // --- Start server ---
-app.listen(port)
+app.listen(port, '0.0.0.0')
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`Port ${port} is already in use. Please free the port or use another.`);
@@ -367,9 +352,8 @@ app.listen(port)
     console.error('Server error:', err);
   })
   .on('listening', () => {
-    console.log(`🚀 Server listening on http://localhost:${port}`);
-  })
-  .on('message', async (topic, message) => {
+    console.log(`🚀 Server listening on http://0.0.0.0:${port}`);
+  }).on('message', async (topic, message) => {
   if (topic.startsWith('cows/')) {
     try {
       const msgStr = message.toString();
