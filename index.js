@@ -70,7 +70,7 @@ mqttClient.on('connect', () => {
 // //   payload.forEach(async (cow) => {
 // //     if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
 // //       const alert = {
-// //         cow_id: cow.id,
+// //         cow_id: cow.deviceId,
 // //         name: cow.name,
 // //         type: 'temperature',
 // //         value: cow.temperature,
@@ -216,7 +216,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
   const cow = req.body;
-  if (!cow || !cow.id) {
+  if (!cow || !cow.deviceId) {
     return res.status(400).json({ error: 'Missing cow data or ID' });
   }
 
@@ -225,12 +225,12 @@ app.post('/esp/data', async (req, res) => {
     const { data: existingCow, error: fetchError } = await supabase
       .from('cows')
       .select('id')
-      .eq('id', cow.id)
+      .eq('id', cow.deviceId)
       .maybeSingle();
 
     if (!existingCow) {
       const { error: insertCowError } = await supabase.from('cows').insert([{
-        id: cow.id,
+        id: cow.deviceId,
         name: cow.name || 'Unnamed',
         latitude: cow.latitude,
         longitude: cow.longitude,
@@ -238,14 +238,14 @@ app.post('/esp/data', async (req, res) => {
         location: cow.location || '',
       }]);
       if (insertCowError) throw new Error(`Failed to insert cow: ${insertCowError.message}`);
-      console.log(`🐄 New cow inserted: ${cow.id}`);
+      console.log(`🐄 New cow inserted: ${cow.deviceId}`);
     }
 
     // 2. Fetch last event
     const { data: lastEvent, error: lastError } = await supabase
       .from('cow_events')
       .select('*')
-      .eq('cow_id', cow.id)
+      .eq('cow_id', cow.deviceId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -277,7 +277,7 @@ app.post('/esp/data', async (req, res) => {
     if (changes.length > 0) {
       const eventType = changes[0];
       const event = {
-        cow_id: cow.id,
+        cow_id: cow.deviceId,
         event_type: eventType,
         event_data: {
           latitude: cow.latitude,
@@ -294,9 +294,9 @@ app.post('/esp/data', async (req, res) => {
         return res.status(500).json({ error: 'Failed to log event' });
       }
 
-      console.log(`📥 Event recorded: ${eventType} for cow ${cow.id}`);
+      console.log(`📥 Event recorded: ${eventType} for cow ${cow.deviceId}`);
     } else {
-      console.log(`ℹ️ No event recorded for cow ${cow.id}`);
+      console.log(`ℹ️ No event recorded for cow ${cow.deviceId}`);
     }
 
     // 6. Always emit via MQTT
@@ -446,7 +446,7 @@ app.listen(port, '0.0.0.0')
         payload.forEach(async (cow) => {
           if (cow.temperature && (cow.temperature > 39 || cow.temperature < 36)) {
             const alert = {
-              cow_id: cow.id,
+              cow_id: cow.deviceId,
               name: cow.name,
               type: 'temperature',
               value: cow.temperature,
