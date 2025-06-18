@@ -215,7 +215,9 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
+  
   const cow = req.body;
+  console.log('Received cow data:', cow);
   if (!cow || !cow.deviceId) {
     return res.status(400).json({ error: 'Missing cow data or ID' });
   }
