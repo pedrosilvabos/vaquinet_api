@@ -216,11 +216,21 @@ function getDistance(lat1, lon1, lat2, lon2) {
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
   
-  const cow = req.body;
-  console.log('Received cow data:', cow);
-  if (!cow || !cow.deviceId) {
-    return res.status(400).json({ error: 'Missing cow data or ID' });
+  const payload = req.body;
+
+  if (!payload || !Array.isArray(payload)) {
+    return res.status(400).json({ error: 'Expected an array of cow objects' });
   }
+
+  const results = [];
+
+  for (const cow of payload) {
+    const cowId = cow.deviceId;
+    if (!cow || !cowId) {
+      results.push({ status: 'skipped', reason: 'Missing deviceId' });
+      continue;
+    }
+
 
   try {
     // 1. Ensure cow exists
@@ -309,8 +319,10 @@ app.post('/esp/data', async (req, res) => {
     console.error('❌ Error in /esp/data:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+  }
 
+  res.status(200).json({ message: 'All cows processed', results });
+});
 
 
 
