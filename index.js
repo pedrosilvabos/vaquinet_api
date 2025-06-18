@@ -201,65 +201,81 @@ app.put('/cows/:id', async (req, res) => {
 });
 
 function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // meters
-  const toRad = (deg) => deg * (Math.PI / 180);
-  const φ1 = toRad(lat1);
-  const φ2 = toRad(lat2);
-  const Δφ = toRad(lat2 - lat1);
-  const Δλ = toRad(lon2 - lon1);
-
-  const a = Math.sin(Δφ / 2) ** 2 +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // in meters
+  const R = 6371e3;
+  const toRad = deg => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
 
 
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
   const cow = req.body;
-
   if (!cow || !cow.id) {
-    return res.status(400).json({ error: 'Invalid or missing cow data' });
+    return res.status(400).json({ error: 'Missing cow data or ID' });
   }
 
   try {
-    // 1. Fetch last event for this cow
-    const { data: lastEvent, error: lastEventError } = await supabase
+    // 1. Ensure cow exists
+    const { data: existingCow, error: fetchError } = await supabase
+      .from('cows')
+      .select('id')
+      .eq('id', cow.id)
+      .maybeSingle();
+
+    if (!existingCow) {
+      const { error: insertCowError } = await supabase.from('cows').insert([{
+        id: cow.id,
+        name: cow.name || 'Unnamed',
+        latitude: cow.latitude,
+        longitude: cow.longitude,
+        temperature: cow.temperature,
+        location: cow.location || '',
+      }]);
+      if (insertCowError) throw new Error(`Failed to insert cow: ${insertCowError.message}`);
+      console.log(`🐄 New cow inserted: ${cow.id}`);
+    }
+
+    // 2. Fetch last event
+    const { data: lastEvent, error: lastError } = await supabase
       .from('cow_events')
       .select('*')
       .eq('cow_id', cow.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
-
-    if (lastEventError && lastEventError.code !== 'PGRST116') {
-      console.error('Error fetching last event:', lastEventError.message);
-      return res.status(500).json({ error: 'Failed to fetch event history' });
-    }
+      .maybeSingle();
 
     const now = new Date();
     const last = lastEvent || {};
     const changes = [];
 
-    // 2. Check for meaningful changes
+    // 3. Movement logic
+    const moved = cow.latitude && cow.longitude && last.event_data?.latitude && last.event_data?.longitude
+      ? getDistance(cow.latitude, cow.longitude, last.event_data.latitude, last.event_data.longitude) > 10
+      : false;
+
+    const timeSinceLast = last.created_at
+      ? now.getTime() - new Date(last.created_at).getTime()
+      : Number.MAX_SAFE_INTEGER;
+
+    const fifteenMinutes = 15 * 60 * 1000;
+
+    // 4. Triggers
     const batteryDrop = last.event_data?.battery && cow.battery && (last.event_data.battery - cow.battery) >= 10;
     const fallDetected = cow.status === 'fallen' && last.event_type !== 'fall';
-    const moved = cow.latitude && cow.longitude && last.event_data?.latitude && last.event_data?.longitude
-      ? getDistance(cow.latitude, cow.longitude, last.event_data.latitude, last.event_data.longitude) > 15
-      : false;
-    const longInterval = last.created_at ? (new Date(last.created_at).getTime() < now.getTime() - 30 * 60 * 1000) : true;
 
     if (batteryDrop) changes.push('battery_drop');
     if (fallDetected) changes.push('fall');
-    if (moved) changes.push('movement');
-    if (longInterval && changes.length === 0) changes.push('heartbeat');
+    if (moved && timeSinceLast >= fifteenMinutes) changes.push('movement');
 
-    // 3. If changes exist, insert new event
+    // 5. Save if needed
     if (changes.length > 0) {
-      const eventType = changes[0]; // use first reason
+      const eventType = changes[0];
       const event = {
         cow_id: cow.id,
         event_type: eventType,
@@ -268,21 +284,24 @@ app.post('/esp/data', async (req, res) => {
           longitude: cow.longitude,
           battery: cow.battery,
           temperature: cow.temperature,
+          status: cow.status,
         },
       };
 
       const { error: insertError } = await supabase.from('cow_events').insert([event]);
       if (insertError) {
-        console.error('❌ Failed to insert cow event:', insertError.message);
-        return res.status(500).json({ error: 'DB insert failed' });
+        console.error('❌ Error inserting cow_event:', insertError.message);
+        return res.status(500).json({ error: 'Failed to log event' });
       }
 
-      console.log(`✅ Inserted cow event: ${eventType} for cow ${cow.id}`);
+      console.log(`📥 Event recorded: ${eventType} for cow ${cow.id}`);
+    } else {
+      console.log(`ℹ️ No event recorded for cow ${cow.id}`);
     }
 
-    // Always publish via MQTT for real-time UI updates
+    // 6. Always emit via MQTT
     mqttClient.publish('cows/sensors', JSON.stringify(cow));
-    res.status(200).json({ message: 'Event evaluated and data handled' });
+    res.status(200).json({ message: 'Data received and processed' });
 
   } catch (err) {
     console.error('❌ Error in /esp/data:', err.message);
