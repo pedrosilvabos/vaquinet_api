@@ -215,7 +215,6 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
-  
   const payload = req.body;
 
   if (!payload || !Array.isArray(payload)) {
@@ -227,100 +226,92 @@ app.post('/esp/data', async (req, res) => {
   for (const cow of payload) {
     const cowId = cow.deviceId;
     if (!cow || !cowId) {
-      results.push({ status: 'skipped', reason: 'Missing deviceId' });
+      results.push({ deviceId: null, status: 'skipped', reason: 'Missing deviceId' });
       continue;
     }
 
+    try {
+      // 1. Ensure cow exists
+      const { data: existingCow } = await supabase
+        .from('cows')
+        .select('id')
+        .eq('id', cowId)
+        .maybeSingle();
 
-  try {
-    // 1. Ensure cow exists
-    const { data: existingCow, error: fetchError } = await supabase
-      .from('cows')
-      .select('id')
-      .eq('id', cow.deviceId)
-      .maybeSingle();
-
-    if (!existingCow) {
-      const { error: insertCowError } = await supabase.from('cows').insert([{
-        id: cow.deviceId,
-        name: cow.name || 'Unnamed',
-        latitude: cow.latitude,
-        longitude: cow.longitude,
-        temperature: cow.temperature,
-        location: cow.location || '',
-      }]);
-      if (insertCowError) throw new Error(`Failed to insert cow: ${insertCowError.message}`);
-      console.log(`🐄 New cow inserted: ${cow.deviceId}`);
-    }
-
-    // 2. Fetch last event
-    const { data: lastEvent, error: lastError } = await supabase
-      .from('cow_events')
-      .select('*')
-      .eq('cow_id', cow.deviceId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const now = new Date();
-    const last = lastEvent || {};
-    const changes = [];
-
-    // 3. Movement logic
-    const moved = cow.latitude && cow.longitude && last.event_data?.latitude && last.event_data?.longitude
-      ? getDistance(cow.latitude, cow.longitude, last.event_data.latitude, last.event_data.longitude) > 10
-      : false;
-
-    const timeSinceLast = last.created_at
-      ? now.getTime() - new Date(last.created_at).getTime()
-      : Number.MAX_SAFE_INTEGER;
-
-    const fifteenMinutes = 15 * 60 * 1000;
-
-    // 4. Triggers
-    const batteryDrop = last.event_data?.battery && cow.battery && (last.event_data.battery - cow.battery) >= 10;
-    const fallDetected = cow.status === 'fallen' && last.event_type !== 'fall';
-
-    if (batteryDrop) changes.push('battery_drop');
-    if (fallDetected) changes.push('fall');
-    if (moved && timeSinceLast >= fifteenMinutes) changes.push('movement');
-
-    // 5. Save if needed
-    if (changes.length > 0) {
-      const eventType = changes[0];
-      const event = {
-        cow_id: cow.deviceId,
-        event_type: eventType,
-        event_data: {
+      if (!existingCow) {
+        const { error: insertCowError } = await supabase.from('cows').insert([{
+          id: cowId,
+          name: cow.name || 'Unnamed',
           latitude: cow.latitude,
           longitude: cow.longitude,
-          battery: cow.battery,
           temperature: cow.temperature,
-          status: cow.status,
-        },
-      };
-
-      const { error: insertError } = await supabase.from('cow_events').insert([event]);
-      if (insertError) {
-        console.error('❌ Error inserting cow_event:', insertError.message);
-        return res.status(500).json({ error: 'Failed to log event' });
+          location: cow.location || '',
+        }]);
+        if (insertCowError) throw new Error(`Failed to insert cow: ${insertCowError.message}`);
+        console.log(`🐄 New cow inserted: ${cowId}`);
       }
 
-      console.log(`📥 Event recorded: ${eventType} for cow ${cow.deviceId}`);
-    } else {
-      console.log(`ℹ️ No event recorded for cow ${cow.deviceId}`);
+      // 2. Get last event
+      const { data: lastEvent } = await supabase
+        .from('cow_events')
+        .select('*')
+        .eq('cow_id', cowId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const now = new Date();
+      const last = lastEvent || {};
+      const changes = [];
+
+      const moved = cow.latitude && cow.longitude && last.event_data?.latitude && last.event_data?.longitude
+        ? getDistance(cow.latitude, cow.longitude, last.event_data.latitude, last.event_data.longitude) > 10
+        : false;
+
+      const timeSinceLast = last.created_at
+        ? now.getTime() - new Date(last.created_at).getTime()
+        : Number.MAX_SAFE_INTEGER;
+
+      const fifteenMinutes = 15 * 60 * 1000;
+      const batteryDrop = last.event_data?.battery && cow.battery && (last.event_data.battery - cow.battery) >= 10;
+      const fallDetected = cow.status === 'fallen' && last.event_type !== 'fall';
+
+      if (batteryDrop) changes.push('battery_drop');
+      if (fallDetected) changes.push('fall');
+      if (moved && timeSinceLast >= fifteenMinutes) changes.push('movement');
+
+      if (changes.length > 0) {
+        const eventType = changes[0];
+        const event = {
+          cow_id: cowId,
+          event_type: eventType,
+          event_data: {
+            latitude: cow.latitude,
+            longitude: cow.longitude,
+            battery: cow.battery,
+            temperature: cow.temperature,
+            status: cow.status,
+          },
+        };
+
+        const { error: insertError } = await supabase.from('cow_events').insert([event]);
+        if (insertError) throw new Error(`Failed to insert cow_event: ${insertError.message}`);
+        console.log(`📥 Event recorded: ${eventType} for cow ${cowId}`);
+        results.push({ deviceId: cowId, status: 'event recorded', type: eventType });
+      } else {
+        console.log(`ℹ️ No event recorded for cow ${cowId}`);
+        results.push({ deviceId: cowId, status: 'no event recorded' });
+      }
+
+      mqttClient.publish('cows/sensors', JSON.stringify(cow));
+
+    } catch (err) {
+      console.error(`❌ Error processing cow ${cowId}:`, err.message);
+      results.push({ deviceId: cowId, status: 'error', error: err.message });
     }
-
-    // 6. Always emit via MQTT
-    mqttClient.publish('cows/sensors', JSON.stringify(cow));
-    res.status(200).json({ message: 'Data received and processed' });
-
-  } catch (err) {
-    console.error('❌ Error in /esp/data:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
-  }
   }
 
+  // ✅ Respond only once, after loop finishes
   res.status(200).json({ message: 'All cows processed', results });
 });
 
