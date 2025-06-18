@@ -200,32 +200,96 @@ app.put('/cows/:id', async (req, res) => {
   res.json(data);
 });
 
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // meters
+  const toRad = (deg) => deg * (Math.PI / 180);
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+
+  const a = Math.sin(Δφ / 2) ** 2 +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // in meters
+}
+
+
 // Endpoint to receive sensor data from ESP devices and publish to MQTT
 app.post('/esp/data', async (req, res) => {
-  const sensorData = req.body;
+  const cow = req.body;
 
-  if (!sensorData) {
-    return res.status(400).json({ error: 'Missing sensor data in request body' });
+  if (!cow || !cow.id) {
+    return res.status(400).json({ error: 'Invalid or missing cow data' });
   }
 
   try {
-    // Convert the incoming JSON sensor data to string for MQTT publish
-    const payload = JSON.stringify(sensorData);
+    // 1. Fetch last event for this cow
+    const { data: lastEvent, error: lastEventError } = await supabase
+      .from('cow_events')
+      .select('*')
+      .eq('cow_id', cow.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-    // Publish to the MQTT topic you want (e.g. cows/sensors)
-    mqttClient.publish('cows/sensors', payload, (err) => {
-      if (err) {
-        console.error('❌ MQTT publish error:', err);
-        return res.status(500).json({ error: 'Failed to publish MQTT message' });
+    if (lastEventError && lastEventError.code !== 'PGRST116') {
+      console.error('Error fetching last event:', lastEventError.message);
+      return res.status(500).json({ error: 'Failed to fetch event history' });
+    }
+
+    const now = new Date();
+    const last = lastEvent || {};
+    const changes = [];
+
+    // 2. Check for meaningful changes
+    const batteryDrop = last.event_data?.battery && cow.battery && (last.event_data.battery - cow.battery) >= 10;
+    const fallDetected = cow.status === 'fallen' && last.event_type !== 'fall';
+    const moved = cow.latitude && cow.longitude && last.event_data?.latitude && last.event_data?.longitude
+      ? getDistance(cow.latitude, cow.longitude, last.event_data.latitude, last.event_data.longitude) > 15
+      : false;
+    const longInterval = last.created_at ? (new Date(last.created_at).getTime() < now.getTime() - 30 * 60 * 1000) : true;
+
+    if (batteryDrop) changes.push('battery_drop');
+    if (fallDetected) changes.push('fall');
+    if (moved) changes.push('movement');
+    if (longInterval && changes.length === 0) changes.push('heartbeat');
+
+    // 3. If changes exist, insert new event
+    if (changes.length > 0) {
+      const eventType = changes[0]; // use first reason
+      const event = {
+        cow_id: cow.id,
+        event_type: eventType,
+        event_data: {
+          latitude: cow.latitude,
+          longitude: cow.longitude,
+          battery: cow.battery,
+          temperature: cow.temperature,
+        },
+      };
+
+      const { error: insertError } = await supabase.from('cow_events').insert([event]);
+      if (insertError) {
+        console.error('❌ Failed to insert cow event:', insertError.message);
+        return res.status(500).json({ error: 'DB insert failed' });
       }
-      console.log('✅ Sensor data published to MQTT:', payload);
-      res.status(200).json({ message: 'Data received and published to MQTT' });
-    });
+
+      console.log(`✅ Inserted cow event: ${eventType} for cow ${cow.id}`);
+    }
+
+    // Always publish via MQTT for real-time UI updates
+    mqttClient.publish('cows/sensors', JSON.stringify(cow));
+    res.status(200).json({ message: 'Event evaluated and data handled' });
+
   } catch (err) {
-    console.error('❌ Error processing sensor data:', err);
+    console.error('❌ Error in /esp/data:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 
 
