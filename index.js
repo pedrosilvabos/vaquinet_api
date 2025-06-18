@@ -246,6 +246,8 @@ app.post('/esp/data', async (req, res) => {
           longitude: cow.longitude,
           temperature: cow.temperature,
           location: cow.location || '',
+          isAlerted: false,
+          last_alert_type: null,
         }]);
         if (insertCowError) throw new Error(`Failed to insert cow: ${insertCowError.message}`);
         console.log(`🐄 New cow inserted: ${cowId}`);
@@ -280,6 +282,50 @@ app.post('/esp/data', async (req, res) => {
       if (fallDetected) changes.push('fall');
       if (moved && timeSinceLast >= fifteenMinutes) changes.push('movement');
 
+      // 3. Check temperature threshold
+      const abnormalTemp = cow.temperature > 39 || cow.temperature < 36;
+      if (abnormalTemp) {
+        changes.push('temperature');
+
+        const alert = {
+          cow_id: cowId,
+          name: cow.name,
+          type: 'temperature',
+          value: cow.temperature,
+          message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
+          location: cow.location,
+          latitude: cow.latitude,
+          longitude: cow.longitude,
+          timestamp: now.toISOString(),
+        };
+
+        const { error: alertInsertError } = await supabase.from('alerts').insert(alert);
+        if (alertInsertError) {
+          console.error('❌ Failed to insert temperature alert:', alertInsertError.message);
+        } else {
+          console.log('🚨 Temperature alert inserted:', alert);
+        }
+
+        // Mark cow as alerted
+        await supabase
+          .from('cows')
+          .update({
+            isAlerted: true,
+            last_alert_type: 'temperature',
+          })
+          .eq('id', cowId);
+      } else {
+        // Clear alert if needed
+        await supabase
+          .from('cows')
+          .update({
+            isAlerted: false,
+            last_alert_type: null,
+          })
+          .eq('id', cowId);
+      }
+
+      // 4. If any event type triggered, record it
       if (changes.length > 0) {
         const eventType = changes[0];
         const event = {
@@ -303,18 +349,21 @@ app.post('/esp/data', async (req, res) => {
         results.push({ deviceId: cowId, status: 'no event recorded' });
       }
 
-      mqttClient.publish('cows/sensors', JSON.stringify(cow));
+      // 5. Emit MQTT with isAlerted
+      mqttClient.publish('cows/sensors', JSON.stringify({
+        ...cow,
+        isAlerted: abnormalTemp,
+        lastAlertType: abnormalTemp ? 'temperature' : null,
+      }));
 
-    } catch (err) {
+ } catch (err) {
       console.error(`❌ Error processing cow ${cowId}:`, err.message);
       results.push({ deviceId: cowId, status: 'error', error: err.message });
     }
   }
 
-  // ✅ Respond only once, after loop finishes
   res.status(200).json({ message: 'All cows processed', results });
 });
-
 
 
 //delete a cow by ID
