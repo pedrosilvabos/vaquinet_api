@@ -293,9 +293,9 @@ app.post('/esp/data', async (req, res) => {
           type: 'temperature',
           value: cow.temperature,
           message: `Abnormal temperature detected for ${cow.name}: ${cow.temperature}°C`,
-          location: cow.location,
-          latitude: cow.latitude,
-          longitude: cow.longitude,
+          latitude: cow.lat,
+          longitude: cow.lon,
+          temperature: cow.t,
           timestamp: now.toISOString(),
         };
 
