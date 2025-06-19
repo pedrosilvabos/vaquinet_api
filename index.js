@@ -224,7 +224,7 @@ app.post('/esp/data', async (req, res) => {
   const results = [];
 
   for (const cow of payload) {
-    const cowId = cow.deviceId;
+    const cowId = cow.id;
     if (!cow || !cowId) {
       results.push({ deviceId: null, status: 'skipped', reason: 'Missing deviceId' });
       continue;
