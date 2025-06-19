@@ -328,7 +328,7 @@ app.post('/esp/data', async (req, res) => {
 
       
       // 4. If any event type triggered, record it
-      if (changes.length == 0) {
+      if (changes.length > 0) {
         const eventType = changes[0];
         const event = {
           cow_id: cowId,
