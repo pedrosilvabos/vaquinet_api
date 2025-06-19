@@ -242,9 +242,9 @@ app.post('/esp/data', async (req, res) => {
         const { error: insertCowError } = await supabase.from('cows').insert([{
           id: cowId,
           name: cow.name || 'Unnamed',
-          latitude: cow.latitude,
-          longitude: cow.longitude,
-          temperature: cow.temperature,
+          latitude: cow.lat,
+          longitude: cow.long,
+          temperature: cow.t,
           location: cow.location || '',
           isAlerted: false,
           last_alert_type: null,
