@@ -325,29 +325,34 @@ app.post('/esp/data', async (req, res) => {
           .eq('id', cowId);
       }
 
-      // 4. If any event type triggered, record it
-      if (changes.length > 0) {
-        const eventType = changes[0];
-        const event = {
-          cow_id: cowId,
-          event_type: eventType,
-          event_data: {
-            latitude: cow.latitude,
-            longitude: cow.longitude,
-            battery: cow.battery,
-            temperature: cow.temperature,
-            status: cow.status,
-          },
-        };
 
-        const { error: insertError } = await supabase.from('cow_events').insert([event]);
+         const { error: insertError } = await supabase.from('cow_events').insert([event]);
         if (insertError) throw new Error(`Failed to insert cow_event: ${insertError.message}`);
         console.log(`📥 Event recorded: ${eventType} for cow ${cowId}`);
         results.push({ deviceId: cowId, status: 'event recorded', type: eventType });
-      } else {
-        console.log(`ℹ️ No event recorded for cow ${cowId}`);
-        results.push({ deviceId: cowId, status: 'no event recorded' });
-      }
+      // // 4. If any event type triggered, record it
+      // if (changes.length > 0) {
+      //   const eventType = changes[0];
+      //   const event = {
+      //     cow_id: cowId,
+      //     event_type: eventType,
+      //     event_data: {
+      //       latitude: cow.latitude,
+      //       longitude: cow.longitude,
+      //       battery: cow.battery,
+      //       temperature: cow.temperature,
+      //       status: cow.status,
+      //     },
+      //   };
+
+      //   const { error: insertError } = await supabase.from('cow_events').insert([event]);
+      //   if (insertError) throw new Error(`Failed to insert cow_event: ${insertError.message}`);
+      //   console.log(`📥 Event recorded: ${eventType} for cow ${cowId}`);
+      //   results.push({ deviceId: cowId, status: 'event recorded', type: eventType });
+      // } else {
+      //   console.log(`ℹ️ No event recorded for cow ${cowId}`);
+      //   results.push({ deviceId: cowId, status: 'no event recorded' });
+      // }
 
       // 5. Emit MQTT with isAlerted
       mqttClient.publish('cows/sensors', JSON.stringify({
