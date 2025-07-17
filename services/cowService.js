@@ -36,6 +36,7 @@ const cowService = {
       birth_date: req.body.birth_date || null,
       breed: req.body.breed || null
     };
+    console.log("[POST] Creating cow:", cleanCow);
     try {
       const { data, error } = await supabase.from('cows').insert([cleanCow]).select().single();
       if (error) throw error;
@@ -80,6 +81,33 @@ const cowService = {
     }
   },
 
+async getCowEventsById(req, res) {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing cow ID in request parameters' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('cow_events')
+      .select('*')
+      .eq('cow_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error(`[GET] Error fetching events for cow ${id}:`, error.message);
+      return res.status(500).json({ error: 'Failed to fetch cow events', details: error.message });
+    }
+
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error(`[GET] Unexpected error fetching cow events for ${id}:`, err.message);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+},
+
+
   async batchInsertCows(req, res) {
     const { data } = req.body;
     if (!Array.isArray(data)) {
@@ -103,6 +131,33 @@ const cowService = {
       res.status(500).json({ error: 'Batch insert failed', details: err.message });
     }
   },
+
+async getCowById(req, res) {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing cow ID in request parameters' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('cows')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      console.warn(`[GET] Cow not found or error for ID: ${id}`, error?.message);
+      return res.status(404).json({ error: 'Cow not found', details: error?.message });
+    }
+
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error(`[GET] Unexpected error fetching cow by ID ${id}:`, err.message);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+},
+
 
   async processSensorData(req, res) {
     const payload = req.body;
@@ -153,7 +208,8 @@ const cowService = {
             node_battery: cow.batteryVoltage,
             node_battery_percent: cow.batteryPercent,
             base_battery: cow.baseBatteryVoltage,
-            base_battery_percent: cow.baseBatteryPercent
+            base_battery_percent: cow.baseBatteryPercent,
+            node_temperature: cow.temperature
           }
         }]);
 

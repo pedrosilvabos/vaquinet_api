@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.get('/', cowService.getAllCows);
 router.get('/:id', cowService.getCowById);
+router.get('/:id/events', cowService.getCowEventsById);
 router.post('/', cowService.createCow);
 router.put('/:id', cowService.updateCow);
 router.delete('/:id', cowService.deleteCow);

@@ -1,5 +1,26 @@
 import supabase from '../utils/supabaseClient.js';
 
+const AlertTypes = {
+  1: 'LOW_BATTERY',
+  2: 'NO_GPS_FIX',
+  3: 'DEVICE_DISCONNECTED',
+  4: 'CHARGING_ANOMALY',
+  5: 'SENSOR_FAILURE',
+  10: 'UNUSUAL_MOVEMENT',
+  11: 'PROLONGED_INACTIVITY',
+  12: 'GEOFENCE_BREACH',
+  13: 'CALVING_DETECTED',
+  14: 'AGGRESSION_EVENT',
+  50: 'POSSIBLE_DEATH',
+  51: 'FALL_DETECTED',
+  52: 'TEMPERATURE_CRITICAL',
+  53: 'VIOLENT_BEHAVIOR_ALERT',
+};
+
+function getAlertLabel(type) {
+  return AlertTypes[type] || 'UNKNOWN_ALERT';
+}
+
 export async function batchTelemetry(req, res) {
   const { data } = req.body;
 
@@ -29,7 +50,7 @@ export async function batchTelemetry(req, res) {
       // Upsert cow
       await supabase
         .from('cows')
-        .upsert([{ id: cowId, name: cow.name || `ESPCOW_${cowId}` }], { onConflict: 'id' });
+        .upsert([{ id: cowId, name: cow.name || `${cowId}` }], { onConflict: 'id' });
 
       // Build event payload
       const eventPayload = {
@@ -45,6 +66,9 @@ export async function batchTelemetry(req, res) {
           base_battery: eventData.base_battery ?? null,
           base_battery_percent: eventData.base_battery_percent ?? null,
           isAlerted: !!eventData.isAlerted,
+          alertType: eventData.alertType ?? 'UNKNOWN_ALERT',
+          node_vbus: eventData.node_vbus ?? null,
+          node_has_battery: eventData.node_has_battery ?? null,
         },
       };
 
@@ -62,19 +86,22 @@ export async function batchTelemetry(req, res) {
       }
 
       // If alert, insert into cow_alerts
-      if (eventPayload.event_data.isAlerted) {
+      if (eventPayload.event_data.isAlerted && eventPayload.event_data.alertType != null) {
+        const typeId = eventPayload.event_data.alertType;
         const alertPayload = {
           cow_id: cowId,
           base_id: baseId,
-          type: 'generic_alert', // Extendable later
+          type: typeId, // now storing as integer enum
           source_event_id: insertedEvents.id,
           latitude: eventData.latitude,
           longitude: eventData.longitude,
           node_battery: eventData.node_battery_percent,
-          temperature: eventData.temperature,      
+          temperature: eventData.temperature,
         };
 
-        console.log(`🚨 Alert triggered for ${cowId}:`, alertPayload);
+        console.log(`🚨 Alert triggered [${typeId} - ${getAlertLabel(typeId)}] for ${cowId}:`, alertPayload);
+//TODO severe alerts should be sent to the alerting system making the sim7600 send an SMS or even call a phone number
+
 
         const { error: alertError } = await supabase
           .from('alerts')
