@@ -209,7 +209,7 @@ async getCowById(req, res) {
             node_battery_percent: cow.batteryPercent,
             base_battery: cow.baseBatteryVoltage,
             base_battery_percent: cow.baseBatteryPercent,
-            node_temperature: cow.temperature
+            node_temperature: cow.event_data.temperature
           }
         }]);
 

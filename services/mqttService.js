@@ -17,6 +17,7 @@ export const TOPICS = {
   NEW: 'cows/new',
   ALL: 'cows/all',
   DETAILS: 'cows/details',
+  TELEMETRY: 'cows/telemetry',
 };
 
 // ✅ Load and validate Supabase config

@@ -1,4 +1,5 @@
 import supabase from '../utils/supabaseClient.js';
+import { publish, TOPICS } from './mqttService.js';
 
 const AlertTypes = {
   1: 'LOW_BATTERY',
@@ -47,12 +48,47 @@ export async function batchTelemetry(req, res) {
     }
 
     try {
-      // Upsert cow
-      await supabase
-        .from('cows')
-        .upsert([{ id: cowId, name: cow.name || `${cowId}` }], { onConflict: 'id' });
+      // ⚙️ 1. Update or insert cow metadata
+      const cleanUpdate = {
+        name: cow.name ?? null,
+        tag_id: cow.tag_id ?? null,
+        birth_date: cow.birth_date ?? null,
+        breed: cow.breed ?? null,
+      };
 
-      // Build event payload
+      const { data: existingCow, error: fetchError } = await supabase
+        .from('cows')
+        .select('id')
+        .eq('id', cowId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (existingCow) {
+        const { error: updateError } = await supabase
+          .from('cows')
+          .update(cleanUpdate)
+          .eq('id', cowId);
+
+        if (updateError) {
+          console.warn(`⚠️ Failed to update cow ${cowId}:`, updateError.message);
+        }
+      } else {
+        const insertCow = {
+          id: cowId,
+          ...cleanUpdate,
+        };
+
+        const { error: insertError } = await supabase
+          .from('cows')
+          .insert([insertCow]);
+
+        if (insertError) {
+          console.warn(`⚠️ Failed to insert cow ${cowId}:`, insertError.message);
+        }
+      }
+        console.warn(`⚠️ eventData: `, eventData);
+      // 📦 2. Insert telemetry event
       const eventPayload = {
         cow_id: cowId,
         base_id: baseId,
@@ -60,7 +96,7 @@ export async function batchTelemetry(req, res) {
         event_data: {
           latitude: eventData.latitude ?? null,
           longitude: eventData.longitude ?? null,
-          temperature: eventData.temperature ?? null,
+          temperature: eventData.node_temperature ?? null,
           node_battery: eventData.node_battery ?? null,
           node_battery_percent: eventData.node_battery_percent ?? null,
           base_battery: eventData.base_battery ?? null,
@@ -84,14 +120,15 @@ export async function batchTelemetry(req, res) {
         results.push({ cowId, status: 'error', error: eventError.message });
         continue;
       }
-
-      // If alert, insert into cow_alerts
+      console.log('telemtry!')
+      publish(TOPICS.TELEMETRY, data);
+      // 🚨 3. Insert alert if triggered
       if (eventPayload.event_data.isAlerted && eventPayload.event_data.alertType != null) {
         const typeId = eventPayload.event_data.alertType;
         const alertPayload = {
           cow_id: cowId,
           base_id: baseId,
-          type: typeId, // now storing as integer enum
+          type: typeId,
           source_event_id: insertedEvents.id,
           latitude: eventData.latitude,
           longitude: eventData.longitude,
@@ -100,9 +137,8 @@ export async function batchTelemetry(req, res) {
         };
 
         console.log(`🚨 Alert triggered [${typeId} - ${getAlertLabel(typeId)}] for ${cowId}:`, alertPayload);
-//TODO severe alerts should be sent to the alerting system making the sim7600 send an SMS or even call a phone number
 
-
+        // TODO: severe alerts → SMS or call via SIM7600
         const { error: alertError } = await supabase
           .from('alerts')
           .insert([alertPayload]);
