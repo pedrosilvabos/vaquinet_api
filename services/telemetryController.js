@@ -88,25 +88,29 @@ export async function batchTelemetry(req, res) {
         }
       }
         console.warn(`⚠️ eventData: `, eventData);
-      // 📦 2. Insert telemetry event
-      const eventPayload = {
-        cow_id: cowId,
-        base_id: baseId,
-        event_type: eventType,
-        event_data: {
-          latitude: eventData.latitude ?? null,
-          longitude: eventData.longitude ?? null,
-          temperature: eventData.node_temperature ?? null,
-          node_battery: eventData.node_battery ?? null,
-          node_battery_percent: eventData.node_battery_percent ?? null,
-          base_battery: eventData.base_battery ?? null,
-          base_battery_percent: eventData.base_battery_percent ?? null,
-          isAlerted: !!eventData.isAlerted,
-          alertType: eventData.alertType ?? 'UNKNOWN_ALERT',
-          node_vbus: eventData.node_vbus ?? null,
-          node_has_battery: eventData.node_has_battery ?? null,
-        },
-      };
+   // 📦 2. Insert telemetry event
+    const eventPayload = {
+      cow_id: cowId,
+      base_id: baseId,
+      event_type: eventType,
+      event_data: {
+        latitude: eventData.latitude ?? null,
+        longitude: eventData.longitude ?? null,
+        temperature: eventData.node_temperature ?? null,
+        node_battery: eventData.node_battery ?? null,
+        node_battery_percent: eventData.node_battery_percent ?? null,
+        base_battery: eventData.base_battery ?? null,
+        base_battery_percent: eventData.base_battery_percent ?? null,
+        base_latitude: eventData.base_latitude ?? null,
+        base_longitude: eventData.base_longitude ?? null,
+        isAlerted: !!eventData.isAlerted,
+        alertType: eventData.alertType ?? 'UNKNOWN_ALERT',
+        node_vbus: eventData.node_vbus ?? null,
+        node_has_battery: eventData.node_has_battery ?? null,
+        base_vbus: eventData.base_vbus ?? null,
+      },
+    };
+
 
       console.log(`📦 Inserting event for ${cowId}:`, eventPayload);
 
