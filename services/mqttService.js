@@ -4,10 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const MQTT_BROKER_URL = 'mqtts://728ab5952b9d48ab9865b395f89aec0f.s1.eu.hivemq.cloud:8883';
+const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL;
+
 const MQTT_OPTIONS = {
-  username: 'vakinet',
-  password: 'Vakinet1',
+  username: process.env.MQTT_USERNAME,
+  password: process.env.MQTT_PASSWORD,
+  protocol: 'mqtts',
+  port: 8883,
+  reconnectPeriod: 5000,  // Retry every 5s if disconnected
+  connectTimeout: 10_000, // 10s timeout for DNS/connect
 };
 
 export const TOPICS = {
@@ -20,7 +25,6 @@ export const TOPICS = {
   TELEMETRY: 'cows/telemetry',
 };
 
-// ✅ Load and validate Supabase config
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 if (!supabaseUrl || !supabaseKey) {
@@ -28,52 +32,71 @@ if (!supabaseUrl || !supabaseKey) {
 }
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ✅ Connect to MQTT broker
 export const client = mqtt.connect(MQTT_BROKER_URL, MQTT_OPTIONS);
 
+// ✅ MQTT lifecycle
 client.on('connect', () => {
   console.log('✅ MQTT connected');
   client.subscribe('cows/#', (err) => {
-    if (err) console.error('❌ MQTT subscription error:', err);
+    if (err) console.error('❌ Subscription error:', err.message);
     else console.log('📡 Subscribed to cows/#');
   });
 });
 
-client.on('error', (err) => {
-  console.error('❌ MQTT connection error:', err.message);
+client.on('reconnect', () => {
+  console.log('🔁 MQTT reconnecting...');
 });
 
-// ✅ Publish a message to a topic
+client.on('close', () => {
+  console.warn('⚠️ MQTT connection closed');
+});
+
+client.on('offline', () => {
+  console.warn('⚠️ MQTT went offline');
+});
+
+client.on('error', (err) => {
+  console.error('❌ MQTT error:', err.message);
+});
+
+client.on('end', () => {
+  console.warn('⚠️ MQTT client ended');
+});
+
+// ✅ Publish
 export function publish(topic, payload) {
   if (!client.connected) {
-    console.warn('⚠️ MQTT not connected. Skipping publish to', topic);
+    console.warn('⚠️ MQTT not connected. Dropping publish to:', topic);
     return;
   }
 
   const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  console.log(`[MQTT ➜] ${topic}: ${message}`);
+
   client.publish(topic, message, { qos: 1 }, (err) => {
-    if (err) console.error(`❌ Failed to publish to ${topic}:`, err.message);
-    else console.log(`📤 Published to ${topic}`);
+    if (err) {
+      console.error(`❌ MQTT publish to ${topic} failed:`, err.message);
+    }
   });
 }
 
-// ✅ Listen for MQTT messages
+// ✅ Subscribe handler
 export function onMessage(callback) {
   client.on('message', (topic, message) => {
     try {
       const parsed = JSON.parse(message.toString());
       callback(topic, parsed);
     } catch (err) {
-      console.error(`❌ Failed to parse MQTT message on ${topic}:`, err.message);
+      console.error(`❌ Failed to parse MQTT msg on ${topic}:`, err.message);
     }
   });
 }
 
-// ✅ Publish all cows from DB to MQTT
+// ✅ Push all cows to MQTT
 export async function publishCowList() {
   const { data, error } = await supabase.from('cows').select('*');
   if (error) {
-    console.error('❌ Failed to fetch all cows for MQTT publish:', error.message);
+    console.error('❌ Failed to fetch cows:', error.message);
     return;
   }
   publish(TOPICS.ALL, data);

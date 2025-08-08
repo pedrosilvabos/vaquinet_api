@@ -3,6 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import ordersRoutes from './routes/ordersRoutes.js';
+
+
 
 import * as mqttService from './services/mqttService.js';
 
@@ -22,7 +25,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Routes
 app.use('/cows', cowRoutes);
 app.use('/alerts', alertRoutes);
-
+app.use('/orders', ordersRoutes);
 // MQTT
 mqttService.onMessage((topic, message) => {
   console.log(`[MQTT] ${topic}: ${message.toString()}`);
@@ -30,6 +33,7 @@ mqttService.onMessage((topic, message) => {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Server listening on http://0.0.0.0:${port}`);
 });
+

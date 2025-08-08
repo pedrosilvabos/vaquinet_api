@@ -81,31 +81,31 @@ const cowService = {
     }
   },
 
-async getCowEventsById(req, res) {
-  const { id } = req.params;
+  async getCowEventsById(req, res) {
+    const { id } = req.params;
 
-  if (!id) {
-    return res.status(400).json({ error: 'Missing cow ID in request parameters' });
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('cow_events')
-      .select('*')
-      .eq('cow_id', id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error(`[GET] Error fetching events for cow ${id}:`, error.message);
-      return res.status(500).json({ error: 'Failed to fetch cow events', details: error.message });
+    if (!id) {
+      return res.status(400).json({ error: 'Missing cow ID in request parameters' });
     }
 
-    return res.status(200).json(data);
-  } catch (err) {
-    console.error(`[GET] Unexpected error fetching cow events for ${id}:`, err.message);
-    return res.status(500).json({ error: 'Internal server error', details: err.message });
-  }
-},
+    try {
+      const { data, error } = await supabase
+        .from('cow_events')
+        .select('*')
+        .eq('cow_id', id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error(`[GET] Error fetching events for cow ${id}:`, error.message);
+        return res.status(500).json({ error: 'Failed to fetch cow events', details: error.message });
+      }
+
+      return res.status(200).json(data);
+    } catch (err) {
+      console.error(`[GET] Unexpected error fetching cow events for ${id}:`, err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  },
 
 
   async batchInsertCows(req, res) {
@@ -132,31 +132,31 @@ async getCowEventsById(req, res) {
     }
   },
 
-async getCowById(req, res) {
-  const { id } = req.params;
+  async getCowById(req, res) {
+    const { id } = req.params;
 
-  if (!id) {
-    return res.status(400).json({ error: 'Missing cow ID in request parameters' });
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('cows')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error || !data) {
-      console.warn(`[GET] Cow not found or error for ID: ${id}`, error?.message);
-      return res.status(404).json({ error: 'Cow not found', details: error?.message });
+    if (!id) {
+      return res.status(400).json({ error: 'Missing cow ID in request parameters' });
     }
 
-    return res.status(200).json(data);
-  } catch (err) {
-    console.error(`[GET] Unexpected error fetching cow by ID ${id}:`, err.message);
-    return res.status(500).json({ error: 'Internal server error', details: err.message });
-  }
-},
+    try {
+      const { data, error } = await supabase
+        .from('cows')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        console.warn(`[GET] Cow not found or error for ID: ${id}`, error?.message);
+        return res.status(404).json({ error: 'Cow not found', details: error?.message });
+      }
+
+      return res.status(200).json(data);
+    } catch (err) {
+      console.error(`[GET] Unexpected error fetching cow by ID ${id}:`, err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  },
 
 
   async processSensorData(req, res) {
