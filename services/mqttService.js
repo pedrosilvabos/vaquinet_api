@@ -71,7 +71,7 @@ export function publish(topic, payload) {
   }
 
   const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  console.log(`[MQTT ➜] ${topic}: ${message}`);
+  console.log(`[MQTT ➜] ${topic}: ${message.toString()}`);
 
   client.publish(topic, message, { qos: 1 }, (err) => {
     if (err) {

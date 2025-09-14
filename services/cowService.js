@@ -150,7 +150,7 @@ const cowService = {
         console.warn(`[GET] Cow not found or error for ID: ${id}`, error?.message);
         return res.status(404).json({ error: 'Cow not found', details: error?.message });
       }
-
+     publish(TOPICS.DETAILS, data);
       return res.status(200).json(data);
     } catch (err) {
       console.error(`[GET] Unexpected error fetching cow by ID ${id}:`, err.message);
