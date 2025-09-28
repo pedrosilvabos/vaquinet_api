@@ -110,6 +110,9 @@ export async function batchTelemetry(req, res) {
         base_vbus: eventData.base_vbus ?? null,
         node_satCount: eventData.node_satCount ?? null,
         node_gpsFix: eventData.node_gpsFix ?? null,
+        operatorName: eventData.operatorName ?? null,
+        ratName: eventData.ratName ?? null,
+        signalPercent: eventData.signalPercent ?? null,
       },
     };
 
