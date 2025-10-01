@@ -141,6 +141,48 @@ const fenceService = {
       res.status(400).json({ error: err.message });
     }
   },
+
+  // GET /fences/check?farm_id=...&lat=...&lon=...
+async checkPoint(req, res) {
+  const { farm_id, lat, lon } = req.query;
+  if (!farm_id || !lat || !lon) return res.status(400).json({ error: 'farm_id, lat, lon required' });
+
+  try {
+    const { data: inside, error: e1 } = await supabase
+      .rpc('is_inside_fence', { p_farm_id: farm_id, p_lat: Number(lat), p_lon: Number(lon) });
+    if (e1) throw e1;
+
+    const hit = inside?.find(r => r.inside === true);
+    if (hit) return res.json({ inside: true, fence_id: hit.fence_id, fence_name: hit.name });
+
+    const { data: near, error: e2 } = await supabase
+      .rpc('nearest_fence', { p_farm_id: farm_id, p_lat: Number(lat), p_lon: Number(lon) })
+      .single();
+    if (e2) throw e2;
+
+    return res.json({ inside: false, nearest_fence_id: near.fence_id, nearest_name: near.name, distance_m: near.distance_m });
+  } catch (err) {
+    return res.status(500).json({ error: 'check_failed', details: err.message });
+  }
+}
+
 };
 
+// export async function isCowInside({ farmId, lat, lon }) {
+//   // 1) check coverage
+//   const { data: hits, error: e1 } = await supabase
+//     .rpc('is_inside_fence', { p_farm_id: farmId, p_lat: lat, p_lon: lon });
+//   if (e1) throw e1;
+
+//   const insideRow = hits?.find(r => r.inside === true);
+//   if (insideRow) return { inside: true, fence_id: insideRow.fence_id, fence_name: insideRow.name };
+
+//   // 2) nearest if outside
+//   const { data: near, error: e2 } = await supabase
+//     .rpc('nearest_fence', { p_farm_id: farmId, p_lat: lat, p_lon: lon })
+//     .single();
+//   if (e2) throw e2;
+
+//   return { inside: false, nearest_fence_id: near.fence_id, nearest_name: near.name, distance_m: near.distance_m };
+// }
 export default fenceService;

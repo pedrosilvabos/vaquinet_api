@@ -7,9 +7,9 @@ import { fileURLToPath } from 'url';
 import ordersRoutes from './routes/ordersRoutes.js';
 import cowRoutes from './routes/cowRoutes.js';
 import alertRoutes from './routes/alertRoutes.js';
-import fenceRoutes from './routes/fenceRoutes.js';           // ← add this
+import fenceRoutes from './routes/fenceRoutes.js';   
 import * as mqttService from './services/mqttService.js';
-
+import configRoutes from './routes/configRoutes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -26,7 +26,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/cows', cowRoutes);
 app.use('/alerts', alertRoutes);
 app.use('/orders', ordersRoutes);
-app.use('/fences', fenceRoutes);                              // ← mount here
+app.use('/fences', fenceRoutes);                             
+app.use('/config', configRoutes);
 
 // MQTT
 mqttService.onMessage((topic, message) => {

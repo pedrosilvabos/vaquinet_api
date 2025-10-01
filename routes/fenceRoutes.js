@@ -2,20 +2,18 @@ import express from 'express';
 import fenceService from '../services/fenceService.js';
 
 const router = express.Router();
+const UUIDv4 = '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})';
 
-// GET /fences?farm_id=...
+// Specific routes first
+router.get('/check', fenceService.checkPoint);
+
+// Collection
 router.get('/', fenceService.getAllFences);
-
-// GET /fences/:id
-router.get('/:id', fenceService.getFenceById);
-
-// POST /fences
 router.post('/', fenceService.createFence);
 
-// PUT /fences/:id
-router.put('/:id', fenceService.updateFence);
-
-// DELETE /fences/:id
-router.delete('/:id', fenceService.deleteFence);
+// Item routes with UUID guard
+router.get(`/:id${UUIDv4}`, fenceService.getFenceById);
+router.put(`/:id${UUIDv4}`, fenceService.updateFence);
+router.delete(`/:id${UUIDv4}`, fenceService.deleteFence);
 
 export default router;
