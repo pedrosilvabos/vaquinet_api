@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
+import phonebookRoutes from './routes/phonebookRoutes.js';
 import ordersRoutes from './routes/ordersRoutes.js';
 import cowRoutes from './routes/cowRoutes.js';
 import alertRoutes from './routes/alertRoutes.js';
@@ -28,6 +28,7 @@ app.use('/alerts', alertRoutes);
 app.use('/orders', ordersRoutes);
 app.use('/fences', fenceRoutes);                             
 app.use('/config', configRoutes);
+app.use('/phonebook', phonebookRoutes);
 
 // MQTT
 mqttService.onMessage((topic, message) => {

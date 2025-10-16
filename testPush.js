@@ -1,6 +1,6 @@
 import { sendToToken } from "./fcm.js";
 
-const token = "ejE4Zoc_RpCmlxNy_EkjQF:APA91bEiLD8Fd2d4yoEixesNAJRxB08COcwgbwriZGzsGCJg_kHj_cRK9abl6-AzwfyOMmsUgSumEvtpxorsvVj2kqhC-f_C6e-BS4S7ga4GWN8C4dBsUDg";
+const token = "cZMYYBHhQumDQRcLWrMoWn:APA91bGtSnaJQDBbq9jNElnW1ktQtjimmL93ibbeWch0Y_8AJaywQ1ziMTecCJGxdGkyxbVUeKPTqoPh8A-Iuf59677OW_VVpgnOo4IvaWOHyIaO60284mI";
 
 const res = await sendToToken(token, "Test Push", "Hello from oPastor backend");
 console.log(res);

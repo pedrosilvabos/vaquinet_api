@@ -81,6 +81,33 @@ const cowService = {
     }
   },
 
+async getLatestCowEventById(req, res) {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing cow ID in request parameters' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('latest_cow_events')
+      .select('*')
+      .eq('cow_id', id)
+      .single(); // ensures only one row is returned
+
+    if (error) {
+      console.error(`[GET] Error fetching latest event for cow ${id}:`, error.message);
+      return res.status(500).json({ error: 'Failed to fetch latest cow event', details: error.message });
+    }
+
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error(`[GET] Unexpected error fetching latest cow event for ${id}:`, err.message);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+},
+
+
   async getCowEventsById(req, res) {
     const { id } = req.params;
 

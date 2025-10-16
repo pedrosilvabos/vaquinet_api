@@ -168,21 +168,6 @@ async checkPoint(req, res) {
 
 };
 
-// export async function isCowInside({ farmId, lat, lon }) {
-//   // 1) check coverage
-//   const { data: hits, error: e1 } = await supabase
-//     .rpc('is_inside_fence', { p_farm_id: farmId, p_lat: lat, p_lon: lon });
-//   if (e1) throw e1;
 
-//   const insideRow = hits?.find(r => r.inside === true);
-//   if (insideRow) return { inside: true, fence_id: insideRow.fence_id, fence_name: insideRow.name };
 
-//   // 2) nearest if outside
-//   const { data: near, error: e2 } = await supabase
-//     .rpc('nearest_fence', { p_farm_id: farmId, p_lat: lat, p_lon: lon })
-//     .single();
-//   if (e2) throw e2;
-
-//   return { inside: false, nearest_fence_id: near.fence_id, nearest_name: near.name, distance_m: near.distance_m };
-// }
 export default fenceService;

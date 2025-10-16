@@ -1,5 +1,6 @@
 import supabase from '../utils/supabaseClient.js';
 import { publish, TOPICS } from './mqttService.js';
+import { createFenceBreachOrder } from './ordersService.js';
 import { sendToTopic } from '../fcm.js';
 
 const AlertTypes = {
@@ -67,11 +68,11 @@ export async function batchTelemetry(req, res) {
 
     try {
       // 1) upsert cow metadata
-      const cleanUpdate = {
-        name: cow.name ?? null,
-        tag_id: cow.tag_id ?? null,
-        birth_date: cow.birth_date ?? null,
-        breed: cow.breed ?? null,
+   const cleanUpdate = {
+        name: "Marta",
+      tag_id: "TAG001",
+      birth_date: "2022-04-10",
+      breed: "Holstein"
       };
       const { data: existingCow, error: fetchError } = await supabase
         .from('cows').select('id').eq('id', cowId).maybeSingle();
@@ -107,9 +108,13 @@ export async function batchTelemetry(req, res) {
           base_vbus: eventData.base_vbus ?? null,
           node_satCount: eventData.node_satCount ?? null,
           node_gpsFix: eventData.node_gpsFix ?? null,
+          node_gpsCourse: eventData.node_gpsCourse ?? null,
+          node_gpsAltitude: eventData.node_gpsAltitude ?? null,
+          node_gpsCourse: eventData.node_gpsSpeed ?? null,
           operatorName: eventData.operatorName ?? null,
           ratName: eventData.ratName ?? null,
           signalPercent: eventData.signalPercent ?? null,
+          lteSignalQuality: eventData.lteSignalQuality ?? null,          
         },
       };
 
@@ -152,10 +157,17 @@ console.log('GEOF params:', {
 
 if (Number.isFinite(lat) && Number.isFinite(lon) && typeof farmId === 'string' && farmId.length === 36) {
   try {
-    console.log('HERE2');
     const inside = await isInsideFence({ farmId, lat, lon });
     if (!inside && shouldNotify(cowId)) {
-      await sendToTopic('alerts_all', 'Cow outside fence', `Cow ${cowId} appears outside the boundary`);
+      // push notification (existing)
+      await sendToTopic('alerts_all', 'oPastor Alerta', `Marta saiu do pasto!`);
+
+      // create order (command) for fence breach
+      await createFenceBreachOrder({
+        cowId,
+        farmId,
+        phone: '+351969773385',
+      });
     }
   } catch (e) {
     console.warn('Geofence check failed:', e?.message || e);
