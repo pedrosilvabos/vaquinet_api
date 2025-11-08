@@ -68,12 +68,14 @@ export async function batchTelemetry(req, res) {
 
     try {
       // 1) upsert cow metadata
-   const cleanUpdate = {
-        name: "Marta",
-      tag_id: "TAG001",
-      birth_date: "2022-04-10",
-      breed: "Holstein"
-      };
+ const cleanUpdate = {
+   name:        cow.name        ?? null,
+   tag_id:      cow.tag_id      ?? null,
+   birth_date:  cow.birth_date  ?? null,
+   breed:       cow.breed       ?? null,
+ };
+ console.log('incoming cow event_data keys:', ...new Set(data.flatMap(d => Object.keys(d?.event_data || {}))));
+
       const { data: existingCow, error: fetchError } = await supabase
         .from('cows').select('id').eq('id', cowId).maybeSingle();
       if (fetchError) throw fetchError;
@@ -115,6 +117,8 @@ export async function batchTelemetry(req, res) {
           ratName: eventData.ratName ?? null,
           signalPercent: eventData.signalPercent ?? null,
           lteSignalQuality: eventData.lteSignalQuality ?? null,          
+          lora_rssi: e.lora_rssi ?? null,
+          lora_snr: e.lora_snr ?? null,
         },
       };
 
@@ -183,5 +187,9 @@ if (Number.isFinite(lat) && Number.isFinite(lon) && typeof farmId === 'string' &
     }
   }
 
-  return res.status(200).json({ message: 'Telemetry data processed', results });
+  return res.status(200).json({
+  message: 'Telemetry data processed',
+  seen_event_data_keys: [...new Set(data.flatMap(d => Object.keys(d?.event_data || {})))],
+  results
+});
 }
