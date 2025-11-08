@@ -117,8 +117,8 @@ export async function batchTelemetry(req, res) {
           ratName: eventData.ratName ?? null,
           signalPercent: eventData.signalPercent ?? null,
           lteSignalQuality: eventData.lteSignalQuality ?? null,          
-          lora_rssi: e.lora_rssi ?? null,
-          lora_snr: e.lora_snr ?? null,
+          lora_rssi: eventData.lora_rssi ?? null,
+          lora_snr: eventData.lora_snr ?? null,
         },
       };
 
