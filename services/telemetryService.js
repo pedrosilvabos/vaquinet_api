@@ -21,18 +21,18 @@ const AlertTypes = {
 };
 
 const DEFAULT_FARM_ID = process.env.DEFAULT_FARM_ID || null;
-const lastAlertAt = new Map(); // cow_id -> ts
+const lastAlertAt = new Map(); // node_id -> ts
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
 
 function getAlertLabel(type) {
   return AlertTypes[type] || 'UNKNOWN_ALERT';
 }
 
-function shouldNotify(cowId) {
+function shouldNotify(nodeId) {
   const now = Date.now();
-  const prev = lastAlertAt.get(cowId) || 0;
+  const prev = lastAlertAt.get(nodeId) || 0;
   //if (now - prev < ALERT_COOLDOWN_MS) return false;
-  lastAlertAt.set(cowId, now);
+  lastAlertAt.set(nodeId, now);
   return true;
 }
 
@@ -53,44 +53,44 @@ export async function batchTelemetry(req, res) {
 
   const results = [];
 
-  for (const cow of data) {
-    const cowId = cow.cow_id;
-    const baseId = cow.base_id || null;
+  for (const node of data) {
+    const nodeId = node.node_id;
+    const baseId = node.base_id || null;
     const farmId = '9d97817a-4c54-4c1b-9f83-92df8fa1737a';
-    const eventType = cow.event_type || 'telemetry';
-    const eventData = cow.event_data;
+    const eventType = node.event_type || 'telemetry';
+    const eventData = node.event_data;
 
-    if (!cowId) { results.push({ status: 'skipped', reason: 'missing cow_id' }); continue; }
+    if (!nodeId) { results.push({ status: 'skipped', reason: 'missing node_id' }); continue; }
     if (!eventData || typeof eventData !== 'object') {
-      results.push({ cowId, status: 'skipped', reason: 'invalid or missing event_data' });
+      results.push({ nodeId, status: 'skipped', reason: 'invalid or missing event_data' });
       continue;
     }
 
     try {
-      // 1) upsert cow metadata
+      // 1) upsert node metadata
  const cleanUpdate = {
-   name:        cow.name        ?? null,
-   tag_id:      cow.tag_id      ?? null,
-   birth_date:  cow.birth_date  ?? null,
-   breed:       cow.breed       ?? null,
+   name:        node.name        ?? null,
+   tag_id:      node.tag_id      ?? null,
+   birth_date:  node.birth_date  ?? null,
+   breed:       node.breed       ?? null,
  };
- console.log('incoming cow event_data keys:', ...new Set(data.flatMap(d => Object.keys(d?.event_data || {}))));
+ console.log('incoming node event_data keys:', ...new Set(data.flatMap(d => Object.keys(d?.event_data || {}))));
 
-      const { data: existingCow, error: fetchError } = await supabase
-        .from('cows').select('id').eq('id', cowId).maybeSingle();
+      const { data: existingNode, error: fetchError } = await supabase
+        .from('nodes').select('id').eq('id', nodeId).maybeSingle();
       if (fetchError) throw fetchError;
 
-      if (existingCow) {
-        const { error: updateError } = await supabase.from('cows').update(cleanUpdate).eq('id', cowId);
-        if (updateError) console.warn(`⚠️ Failed to update cow ${cowId}:`, updateError.message);
+      if (existingNode) {
+        const { error: updateError } = await supabase.from('nodes').update(cleanUpdate).eq('id', nodeId);
+        if (updateError) console.warn(`⚠️ Failed to update node ${nodeId}:`, updateError.message);
       } else {
-        const { error: insertError } = await supabase.from('cows').insert([{ id: cowId, ...cleanUpdate }]);
-        if (insertError) console.warn(`⚠️ Failed to insert cow ${cowId}:`, insertError.message);
+        const { error: insertError } = await supabase.from('nodes').insert([{ id: nodeId, ...cleanUpdate }]);
+        if (insertError) console.warn(`⚠️ Failed to insert node ${nodeId}:`, insertError.message);
       }
 
       // 2) insert telemetry event
       const eventPayload = {
-        cow_id: cowId,
+        node_id: nodeId,
         base_id: baseId,
         event_type: eventType,
         event_data: {
@@ -123,8 +123,8 @@ export async function batchTelemetry(req, res) {
       };
 
       const { data: insertedEvents, error: eventError } = await supabase
-        .from('cow_events').insert([eventPayload]).select('id').single();
-      if (eventError) { results.push({ cowId, status: 'error', error: eventError.message }); continue; }
+        .from('node_events').insert([eventPayload]).select('id').single();
+      if (eventError) { results.push({ nodeId, status: 'error', error: eventError.message }); continue; }
 
       publish(TOPICS.TELEMETRY, data);
 
@@ -132,7 +132,7 @@ export async function batchTelemetry(req, res) {
       if (eventPayload.event_data.isAlerted && eventPayload.event_data.alertType != null) {
         const typeId = eventPayload.event_data.alertType;
         const alertPayload = {
-          cow_id: cowId,
+          node_id: nodeId,
           base_id: baseId,
           type: typeId,
           source_event_id: insertedEvents.id,
@@ -143,7 +143,7 @@ export async function batchTelemetry(req, res) {
         };
         const { error: alertError } = await supabase.from('alerts').insert([alertPayload]);
         if (alertError) {
-          results.push({ cowId, status: 'partial', warning: 'Event inserted but alert failed', alertError: alertError.message });
+          results.push({ nodeId, status: 'partial', warning: 'Event inserted but alert failed', alertError: alertError.message });
           continue;
         }
       }
@@ -162,13 +162,13 @@ console.log('GEOF params:', {
 if (Number.isFinite(lat) && Number.isFinite(lon) && typeof farmId === 'string' && farmId.length === 36) {
   try {
     const inside = await isInsideFence({ farmId, lat, lon });
-    if (!inside && shouldNotify(cowId)) {
+    if (!inside && shouldNotify(nodeId)) {
       // push notification (existing)
       await sendToTopic('alerts_all', 'oPastor Alerta', `Marta saiu do pasto!`);
 
       // create order (command) for fence breach
       await createFenceBreachOrder({
-        cowId,
+        nodeId,
         farmId,
         phone: '+351969773385',
       });
@@ -181,9 +181,9 @@ if (Number.isFinite(lat) && Number.isFinite(lon) && typeof farmId === 'string' &
 }
 
 
-      results.push({ cowId, status: 'ok' });
+      results.push({ nodeId, status: 'ok' });
     } catch (err) {
-      results.push({ cowId, status: 'error', error: err.message });
+      results.push({ nodeId, status: 'error', error: err.message });
     }
   }
 

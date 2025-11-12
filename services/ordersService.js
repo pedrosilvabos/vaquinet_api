@@ -74,7 +74,7 @@ export async function createOrderDirect({ type, payload = {}, status = 'pending'
 }
 
 // Convenience for fence breach
-export async function createFenceBreachOrder({ cowId, farmId, phone }) {
+export async function createFenceBreachOrder({ nodeId, farmId, phone }) {
   const now = new Date();
   const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
 
@@ -83,7 +83,7 @@ export async function createFenceBreachOrder({ cowId, farmId, phone }) {
     .from('orders')
     .select('id, created_at')
     .eq('type', 'fenceBreach')
-    .eq('payload->>cow_id', cowId)
+    .eq('payload->>node_id', nodeId)
     .gte('created_at', tenMinutesAgo.toISOString())
     .limit(1)
     .maybeSingle();
@@ -94,16 +94,16 @@ export async function createFenceBreachOrder({ cowId, farmId, phone }) {
   // Otherwise, create new order
   return createOrderDirect({
     type: 'fenceBreach',
-    payload: { cow_id: cowId, farm_id: farmId, phone },
+    payload: { node_id: nodeId, farm_id: farmId, phone },
     status: 'pending',
   });
 }
 
-export async function markOrdersDeliveredByCow(cowId) {
+export async function markOrdersDeliveredByNode(nodeId) {
   const { data, error } = await supabase
     .from('orders')
     .update({ status: 'processed' })
-    .eq('payload->>cow_id', cowId)
+    .eq('payload->>node_id', nodeId)
     .eq('status', 'pending')
     .select('id,type,status,created_at');
 

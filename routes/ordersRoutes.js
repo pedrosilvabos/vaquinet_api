@@ -4,7 +4,7 @@ import {
   getAllOrders,
   createOrder,
   markOrderComplete,
-  markOrdersDeliveredByCow,
+  markOrdersDeliveredByNode,
 } from '../services/ordersService.js';
 
 const router = express.Router();
@@ -12,9 +12,9 @@ const router = express.Router();
 router.get('/', getAllOrders);
 router.post('/', createOrder);
 router.get('/mark/:id', markOrderComplete);
-router.get('/mark-delivered/:cowId', async (req, res) => {
+router.get('/mark-delivered/:odeId', async (req, res) => {
   try {
-    const result = await markOrdersDeliveredByCow(req.params.cowId);
+    const result = await markOrdersDeliveredByNode(req.params.odeId);
     res.json(result); // always 200
   } catch (err) {
     res.status(500).json({ error: err.message });

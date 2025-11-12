@@ -1,22 +1,22 @@
-// routes/cowRoutes.js
+// routes/nodeRoutes.js
 import express from 'express';
-import cowService from '../services/cowService.js';
+import nodeService from '../services/nodeService.js';
 import { batchTelemetry } from '../services/telemetryService.js';
 
 const router = express.Router();
 
 // Specific before generic
-router.get('/latest/:id', cowService.getLatestCowEventById);
+router.get('/latest/:id', nodeService.getLatestNodeEventById);
 
-router.get('/', cowService.getAllCows);
-router.get('/:id/events', cowService.getCowEventsById);
-router.get('/:id', cowService.getCowById);
+router.get('/', nodeService.getAllNodes);
+router.get('/:id/events', nodeService.getNodeEventsById);
+router.get('/:id', nodeService.getNodeById);
 
-router.post('/', cowService.createCow);
-router.put('/:id', cowService.updateCow);
-router.delete('/:id', cowService.deleteCow);
-router.post('/batch', cowService.batchInsertCows);
-router.post('/sensors', cowService.processSensorData);
+router.post('/', nodeService.createNode);
+router.put('/:id', nodeService.updateNode);
+router.delete('/:id', nodeService.deleteNode);
+router.post('/batch', nodeService.batchInsertNodes);
+router.post('/sensors', nodeService.processSensorData);
 router.post('/telemetry/batch', batchTelemetry);
 
 export default router;

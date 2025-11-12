@@ -16,13 +16,13 @@ const MQTT_OPTIONS = {
 };
 
 export const TOPICS = {
-  SENSOR: 'cows/sensors',
-  UPDATE: 'cows/update',
-  DELETE: 'cows/delete',
-  NEW: 'cows/new',
-  ALL: 'cows/all',
-  DETAILS: 'cows/details',
-  TELEMETRY: 'cows/telemetry',
+  SENSOR: 'nodes/sensors',
+  UPDATE: 'nodes/update',
+  DELETE: 'nodes/delete',
+  NEW: 'nodes/new',
+  ALL: 'nodes/all',
+  DETAILS: 'nodes/details',
+  TELEMETRY: 'nodes/telemetry',
 };
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -37,9 +37,9 @@ export const client = mqtt.connect(MQTT_BROKER_URL, MQTT_OPTIONS);
 // ✅ MQTT lifecycle
 client.on('connect', () => {
   console.log('✅ MQTT connected');
-  client.subscribe('cows/#', (err) => {
+  client.subscribe('nodes/#', (err) => {
     if (err) console.error('❌ Subscription error:', err.message);
-    else console.log('📡 Subscribed to cows/#');
+    else console.log('📡 Subscribed to nodes/#');
   });
 });
 
@@ -92,11 +92,11 @@ export function onMessage(callback) {
   });
 }
 
-// ✅ Push all cows to MQTT
-export async function publishCowList() {
-  const { data, error } = await supabase.from('cows').select('*');
+// ✅ Push all nodes to MQTT
+export async function publishNodeList() {
+  const { data, error } = await supabase.from('nodes').select('*');
   if (error) {
-    console.error('❌ Failed to fetch cows:', error.message);
+    console.error('❌ Failed to fetch nodes:', error.message);
     return;
   }
   publish(TOPICS.ALL, data);

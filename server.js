@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import phonebookRoutes from './routes/phonebookRoutes.js';
 import ordersRoutes from './routes/ordersRoutes.js';
-import cowRoutes from './routes/cowRoutes.js';
+import nodeRoutes from './routes/nodeRoutes.js';
 import alertRoutes from './routes/alertRoutes.js';
 import fenceRoutes from './routes/fenceRoutes.js';   
 import * as mqttService from './services/mqttService.js';
@@ -23,7 +23,7 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes
-app.use('/cows', cowRoutes);
+app.use('/nodes', nodeRoutes);
 app.use('/alerts', alertRoutes);
 app.use('/orders', ordersRoutes);
 app.use('/fences', fenceRoutes);                             

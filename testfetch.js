@@ -8,7 +8,7 @@ const supabase = createClient(
 
 async function testSupabase() {
   try {
-    const { data, error } = await supabase.from('cows').select('*');
+    const { data, error } = await supabase.from('nodes').select('*');
     if (error) {
       console.error('Supabase error:', error);
       return;
