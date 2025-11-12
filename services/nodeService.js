@@ -1,5 +1,5 @@
 import supabase from '../utils/supabaseClient.js';
-import { publish, publishnodeList, TOPICS } from './mqttService.js';
+import { publish, publishNodeList, TOPICS } from './mqttService.js';
 import { getDistance } from '../utils/geoUtils.js';
 
 const nodeService = {
