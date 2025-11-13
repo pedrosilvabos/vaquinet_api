@@ -1,5 +1,5 @@
 // File: /services/alertService.js
-import supabase from '../utils/supabaseClient.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
 
 export async function getAllAlerts(req, res) {
   try {

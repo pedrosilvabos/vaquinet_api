@@ -1,5 +1,5 @@
 import express from 'express';
-import configService from '../services/configService.js';
+import configService from '../../services/oPastor/configService.js';
 const router = express.Router();
 
 // FCM first so it doesn't get caught by :key

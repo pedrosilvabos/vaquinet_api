@@ -1,4 +1,4 @@
-import supabase from '../utils/supabaseClient.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
 // optional: import { publish, TOPICS } from './mqttService.js';
 
 const tableKV = 'app_config';        // columns: key TEXT PK, value JSONB, updated_at TIMESTAMPTZ

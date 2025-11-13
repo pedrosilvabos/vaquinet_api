@@ -1,7 +1,7 @@
-import supabase from '../utils/supabaseClient.js';
-import { publish, TOPICS } from './mqttService.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
+import { publish, TOPICS } from '../../utils/mqttService.js';
 import { createFenceBreachOrder } from './ordersService.js';
-import { sendToTopic } from '../fcm.js';
+import { sendToTopic } from '../../fcm.js';
 
 const AlertTypes = {
   1: 'LOW_BATTERY',

@@ -1,6 +1,6 @@
 // File: /routes/alertRoutes.js
 import express from 'express';
-import * as alertService from '../services/alertService.js';
+import * as alertService from '../../services/oPastor/alertService.js';
 
 const router = express.Router();
 

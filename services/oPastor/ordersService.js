@@ -1,5 +1,5 @@
 // File: /services/ordersService.js
-import supabase from '../utils/supabaseClient.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
 
 // GET /orders
 export async function getAllOrders(req, res) {

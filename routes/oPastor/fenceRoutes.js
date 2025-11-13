@@ -1,5 +1,5 @@
 import express from 'express';
-import fenceService from '../services/fenceService.js';
+import fenceService from '../../services/oPastor/fenceService.js';
 
 const router = express.Router();
 const UUIDv4 = '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})';

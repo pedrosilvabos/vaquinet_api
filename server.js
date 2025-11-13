@@ -1,44 +1,46 @@
+// server.js
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import phonebookRoutes from './routes/phonebookRoutes.js';
-import ordersRoutes from './routes/ordersRoutes.js';
-import nodeRoutes from './routes/nodeRoutes.js';
-import alertRoutes from './routes/alertRoutes.js';
-import fenceRoutes from './routes/fenceRoutes.js';   
-import * as mqttService from './services/mqttService.js';
-import configRoutes from './routes/configRoutes.js';
+
+import * as mqttService from './utils/mqttService.js';
+import opastorRouter from './routes/oPastor/index.js';
+import trailsRouter from './routes/trails/index.js';
+
+dotenv.config();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config();
 const app = express();
 const port = process.env.PORT || 10001;
 
-
-app.use(express.json({ limit: '2mb' }));                  
+app.use(express.json({ limit: '2mb' }));
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes
-app.use('/nodes', nodeRoutes);
-app.use('/alerts', alertRoutes);
-app.use('/orders', ordersRoutes);
-app.use('/fences', fenceRoutes);                             
-app.use('/config', configRoutes);
-app.use('/phonebook', phonebookRoutes);
+// Domain mounting
+app.use('/opastor', opastorRouter);
+app.use('/trails', trailsRouter);
 
-// MQTT
+// MQTT logging
 mqttService.onMessage((topic, message) => {
-  console.log(`[MQTT1] ${topic}: ${message.toString()}`);
+  try {
+    const payload = JSON.parse(message.toString());
+    console.log(`[MQTT] ${topic}:`, payload);
+  } catch (e) {
+    console.log(`[MQTT] ${topic}: ${message.toString()}`);
+  }
 });
 
-// Basic root
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// Root
+app.get('/', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'index.html')),
+);
 
-// Optional: 404 and error handler that won't leak stack traces in prod
+// 404 + error
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((err, _req, res, _next) => {
   console.error(err);

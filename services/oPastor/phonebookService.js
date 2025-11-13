@@ -1,5 +1,5 @@
 // File: services/phonebookService.js
-import supabase from '../utils/supabaseClient.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
 export async function getAllContacts(req, res) {
   const { data, error } = await supabase.from('phonebook').select('*').order('id');
   if (error) return res.status(500).json({ error: error.message });

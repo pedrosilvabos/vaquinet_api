@@ -1,5 +1,5 @@
-import supabase from '../utils/supabaseClient.js';
-import { publish, TOPICS } from './mqttService.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
+import { publish, TOPICS } from '../../utils/mqttService.js';
 
 const fenceService = {
   // GET /fences?farm_id=...

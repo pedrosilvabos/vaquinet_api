@@ -1,7 +1,7 @@
 // routes/nodeRoutes.js
 import express from 'express';
-import nodeService from '../services/nodeService.js';
-import { batchTelemetry } from '../services/telemetryService.js';
+import nodeService from '../../services/oPastor/nodeService.js';
+import { batchTelemetry } from '../../services/oPastor/telemetryService.js';
 
 const router = express.Router();
 

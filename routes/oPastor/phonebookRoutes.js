@@ -4,7 +4,7 @@ import {
   getAllContacts,
   addContact,
   deleteContactById,
-} from '../services/phonebookService.js';
+} from '../../services/oPastor/phonebookService.js';
 
 const router = express.Router();
 

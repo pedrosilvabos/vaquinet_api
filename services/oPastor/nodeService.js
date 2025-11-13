@@ -1,6 +1,16 @@
-import supabase from '../utils/supabaseClient.js';
-import { publish, publishNodeList, TOPICS } from './mqttService.js';
-import { getDistance } from '../utils/geoUtils.js';
+import { opastorDb as supabase } from '../../config/supabase.js';
+import { publish, TOPICS } from '../../utils/mqttService.js';
+import { getDistance } from '../../utils/geoUtils.js';
+
+export async function publishNodeList() {
+  const { data, error } = await supabase.from('nodes').select('*');
+  if (error) {
+    console.error('❌ [opastor] Failed to fetch nodes:', error.message);
+    return;
+  }
+
+  publish(TOPICS.ALL, data);
+}
 
 const nodeService = {
   async getAllNodes(req, res) {

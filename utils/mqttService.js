@@ -1,18 +1,22 @@
-// File: services/mqttService.js
+// utils/mqttService.js
 import mqtt from 'mqtt';
-import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL;
+
+if (!MQTT_BROKER_URL) {
+  throw new Error('❌ Missing MQTT_BROKER_URL in .env');
+}
 
 const MQTT_OPTIONS = {
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD,
   protocol: 'mqtts',
   port: 8883,
-  reconnectPeriod: 5000,  // Retry every 5s if disconnected
-  connectTimeout: 10_000, // 10s timeout for DNS/connect
+  reconnectPeriod: 5000,   // Retry every 5s if disconnected
+  connectTimeout: 10_000,  // 10s timeout for DNS/connect
 };
 
 export const TOPICS = {
@@ -25,16 +29,9 @@ export const TOPICS = {
   TELEMETRY: 'nodes/telemetry',
 };
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('❌ Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env');
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 export const client = mqtt.connect(MQTT_BROKER_URL, MQTT_OPTIONS);
 
-// ✅ MQTT lifecycle
+// MQTT lifecycle
 client.on('connect', () => {
   console.log('✅ MQTT connected');
   client.subscribe('nodes/#', (err) => {
@@ -63,41 +60,27 @@ client.on('end', () => {
   console.warn('⚠️ MQTT client ended');
 });
 
-// ✅ Publish
-export function publish(topic, payload) {
+// Publish (no DB, no JSON assumptions)
+export function publish(topic, payload, options = { qos: 1 }) {
   if (!client.connected) {
     console.warn('⚠️ MQTT not connected. Dropping publish to:', topic);
     return;
   }
 
   const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  console.log(`[MQTT ➜] ${topic}: ${message.toString()}`);
+  console.log(`[MQTT ➜] ${topic}: ${message}`);
 
-  client.publish(topic, message, { qos: 1 }, (err) => {
+  client.publish(topic, message, options, (err) => {
     if (err) {
       console.error(`❌ MQTT publish to ${topic} failed:`, err.message);
     }
   });
 }
 
-// ✅ Subscribe handler
+// Subscribe handler – give raw message to caller
 export function onMessage(callback) {
   client.on('message', (topic, message) => {
-    try {
-      const parsed = JSON.parse(message.toString());
-      callback(topic, parsed);
-    } catch (err) {
-      console.error(`❌ Failed to parse MQTT msg on ${topic}:`, err.message);
-    }
+    // caller decides if/when to JSON.parse
+    callback(topic, message);
   });
-}
-
-// ✅ Push all nodes to MQTT
-export async function publishNodeList() {
-  const { data, error } = await supabase.from('nodes').select('*');
-  if (error) {
-    console.error('❌ Failed to fetch nodes:', error.message);
-    return;
-  }
-  publish(TOPICS.ALL, data);
 }
