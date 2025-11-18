@@ -19,7 +19,7 @@ export async function getAllAlerts(req, res) {
 
 export async function createAlert(req, res) {
   try {
-    const { cow_id, base_id, type, source_event_id } = req.body;
+    const { cow_id, base_id, type, source_event_id, message } = req.body;
 
     if (!type) {
       return res.status(400).json({ error: 'Missing required field: type' });
@@ -62,6 +62,7 @@ export async function createAlert(req, res) {
     const payload = {
       cow_id: cow_id ?? null,
       base_id: base_id ?? null,
+      message: message ?? null,
       type,
       source_event_id: source_event_id ?? null,
       timestamp: new Date().toISOString(),
