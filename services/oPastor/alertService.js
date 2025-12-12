@@ -19,7 +19,7 @@ export async function getAllAlerts(req, res) {
 
 export async function createAlert(req, res) {
   try {
-    const { cow_id, base_id, type, source_event_id, message } = req.body;
+    const { cow_id, base_id, type, source_event_id,sender, message } = req.body;
 
  
 
@@ -60,6 +60,7 @@ export async function createAlert(req, res) {
     const payload = {
       cow_id: cow_id ?? null,
       base_id: base_id ?? null,
+      sender: sender ?? null,
       message: message ?? null,
       type: type ?? null,
       source_event_id: source_event_id ?? null,
