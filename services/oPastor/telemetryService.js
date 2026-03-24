@@ -37,6 +37,18 @@ function getAlertLabel(type) {
     return AlertTypes[type] || 'UNKNOWN_ALERT';
 }
 
+function normalizeOptionalText(value) {
+    if (value == null) return null;
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeOptionalDate(value) {
+    const normalized = normalizeOptionalText(value);
+    return normalized;
+}
+
 function shouldNotify(nodeId) {
     const now = Date.now();
     const prev = lastAlertAt.get(nodeId) || 0;
@@ -103,10 +115,10 @@ export async function batchTelemetry(req, res) {
         try {
             // 1) upsert node metadata
             const cleanUpdate = {
-                name: node.name ?? null,
-                tag_id: node.tag_id ?? null,
-                birth_date: node.birth_date ?? null,
-                breed: node.breed ?? null,
+                name: normalizeOptionalText(node.name),
+                tag_id: normalizeOptionalText(node.tag_id),
+                birth_date: normalizeOptionalDate(node.birth_date),
+                breed: normalizeOptionalText(node.breed),
             };
             console.log('incoming node event_data keys:', ...new Set(data.flatMap(d => Object.keys(d?.event_data || {}))));
 
