@@ -77,6 +77,36 @@ async function isInsideFence({
     return Boolean(data?.some(r => r.inside === true));
 }
 
+export async function postBaseStatus(req, res) {
+    const payload = req.body || {};
+    const baseId = normalizeOptionalText(payload.base_id);
+    if (!baseId) {
+        return res.status(400).json({ error: 'missing base_id' });
+    }
+
+    const statusType = normalizeOptionalText(payload.status_type) || 'STATUS';
+    const row = {
+        base_id: baseId,
+        status_type: statusType,
+        status_data: {
+            battery_voltage: payload.battery_voltage ?? null,
+            battery_percent: payload.battery_percent ?? null,
+            vbus_voltage: payload.vbus_voltage ?? null,
+            external_power_present: payload.external_power_present ?? null,
+            backhaul: normalizeOptionalText(payload.backhaul),
+            operator_name: normalizeOptionalText(payload.operator_name),
+            signal_percent: payload.signal_percent ?? null,
+            lte_signal_quality: payload.lte_signal_quality ?? null,
+        },
+    };
+
+    const { error } = await supabase.from('base_status').insert([row]);
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+    return res.status(201).json({ ok: true });
+}
+
 export async function batchTelemetry(req, res) {
     const {
         data

@@ -1,6 +1,6 @@
 import express from 'express';
 import nodeService from '../../services/oPastor/nodeService.js';
-import { batchTelemetry } from '../../services/oPastor/telemetryService.js';
+import { batchTelemetry, postBaseStatus } from '../../services/oPastor/telemetryService.js';
 import { requireBearerToken } from '../../middleware/auth.js';
 
 const router = express.Router();
@@ -24,5 +24,6 @@ router.post('/', nodeService.createNode);
 router.post('/batch', nodeService.batchInsertNodes);
 router.post('/sensors', nodeService.processSensorData);
 router.post('/telemetry/batch', batchTelemetry);
+router.post('/bases/status', postBaseStatus);
 
 export default router;
