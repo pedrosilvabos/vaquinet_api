@@ -1,6 +1,7 @@
 // routes/oPastor/index.js
 import express from 'express';
 import nodeRoutes from './nodeRoutes.js';
+import baseRoutes from './baseRoutes.js';
 import alertRoutes from './alertRoutes.js';
 import ordersRoutes from './ordersRoutes.js';
 import fenceRoutes from './fenceRoutes.js';
@@ -11,6 +12,7 @@ const router = express.Router();
 
 // Everything here will live under /opastor/...
 router.use('/nodes', nodeRoutes);
+router.use('/bases', baseRoutes);
 router.use('/alerts', alertRoutes);
 router.use('/orders', ordersRoutes);
 router.use('/fences', fenceRoutes);
