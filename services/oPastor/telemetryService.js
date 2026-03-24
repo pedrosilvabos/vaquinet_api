@@ -145,45 +145,25 @@ export async function batchTelemetry(req, res) {
             }
 
             // 2) insert telemetry event
+         const normalizedEventType = normalizeOptionalText(eventType) || 'STATUS';
          const eventPayload = {
           node_id: nodeId,
           base_id: baseId,
-          event_type: eventType,
+          event_type: normalizedEventType,
           event_data: {
+            event_id: eventData.event_id ?? null,
             latitude: eventData.latitude ?? null,
             longitude: eventData.longitude ?? null,
-
-            // ✅ ESP sends `temperature`
-            temperature: eventData.temperature ?? null,
-
+            gps_fix: eventData.gps_fix ?? null,
+            sat_count: eventData.sat_count ?? null,
             node_battery: eventData.node_battery ?? null,
             node_battery_percent: eventData.node_battery_percent ?? null,
-
-            base_battery: eventData.base_battery ?? null,
-            base_battery_percent: eventData.base_battery_percent ?? null,
-            base_latitude: eventData.base_latitude ?? null,
-            base_longitude: eventData.base_longitude ?? null,
-
-            isAlerted: !!eventData.isAlerted,
-            alertType: eventData.alertType ?? null, // keep raw; map later if needed
-
             node_vbus: eventData.node_vbus ?? null,
             node_has_battery: eventData.node_has_battery ?? null,
-            base_vbus: eventData.base_vbus ?? null,
-
-            node_satCount: eventData.node_satCount ?? null,
-            node_gpsFix: eventData.node_gpsFix ?? null,
-            node_gpsCourse: eventData.node_gpsCourse ?? null,
-            node_gpsAltitude: eventData.node_gpsAltitude ?? null,
-
-            // ✅ FIX: speed key
-            node_gpsSpeed: eventData.node_gpsSpeed ?? null,
-
-            operatorName: eventData.operatorName ?? null,
-            ratName: eventData.ratName ?? null,
-            signalPercent: eventData.signalPercent ?? null,
-            lteSignalQuality: eventData.lteSignalQuality ?? null,
-
+            backhaul: eventData.backhaul ?? null,
+            operator_name: eventData.operator_name ?? null,
+            signal_percent: eventData.signal_percent ?? null,
+            lte_signal_quality: eventData.lte_signal_quality ?? null,
             lora_rssi: eventData.lora_rssi ?? null,
             lora_snr: eventData.lora_snr ?? null,
           },
@@ -207,17 +187,16 @@ export async function batchTelemetry(req, res) {
             publish(TOPICS.TELEMETRY, data);
 
             // 3) explicit alert rows
-            if (eventPayload.event_data.isAlerted && eventPayload.event_data.alertType != null) {
-                const typeId = eventPayload.event_data.alertType;
+            if (normalizedEventType !== 'STATUS') {
                 const alertPayload = {
                     node_id: nodeId,
                     base_id: baseId,
-                    type: typeId,
+                    type: normalizedEventType,
                     source_event_id: insertedEvents.id,
                     latitude: eventData.latitude,
                     longitude: eventData.longitude,
                     node_battery: eventData.node_battery_percent,
-                    temperature: eventData.temperature,
+                    temperature: null,
                 };
                 const {
                     error: alertError
