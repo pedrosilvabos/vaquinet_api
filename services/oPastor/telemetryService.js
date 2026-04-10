@@ -125,6 +125,11 @@ export async function batchTelemetry(req, res) {
         const farmId = '9d97817a-4c54-4c1b-9f83-92df8fa1737a';
         const eventType = node.event_type || 'telemetry';
         const eventData = node.event_data;
+        const normalizedBatteryVoltage = eventData?.batteryVoltage ?? eventData?.node_battery ?? null;
+        const normalizedBatteryLevel = eventData?.batteryLevel ?? eventData?.node_battery_level ?? null;
+        const normalizedBatteryPercent = eventData?.node_battery_percent ?? null;
+        const normalizedVbusVoltage = eventData?.vbusVoltage ?? eventData?.node_vbus ?? null;
+        const normalizedHasBattery = eventData?.hasBattery ?? eventData?.node_has_battery ?? null;
 
         if (!nodeId) {
             results.push({
@@ -186,10 +191,12 @@ export async function batchTelemetry(req, res) {
             longitude: eventData.longitude ?? null,
             gps_fix: eventData.gps_fix ?? null,
             sat_count: eventData.sat_count ?? null,
-            node_battery: eventData.node_battery ?? null,
-            node_battery_percent: eventData.node_battery_percent ?? null,
-            node_vbus: eventData.node_vbus ?? null,
-            node_has_battery: eventData.node_has_battery ?? null,
+            node_battery: normalizedBatteryVoltage,
+            node_battery_voltage: normalizedBatteryVoltage,
+            node_battery_level: normalizedBatteryLevel,
+            node_battery_percent: normalizedBatteryPercent,
+            node_vbus: normalizedVbusVoltage,
+            node_has_battery: normalizedHasBattery,
             backhaul: eventData.backhaul ?? null,
             operator_name: eventData.operator_name ?? null,
             signal_percent: eventData.signal_percent ?? null,
@@ -225,7 +232,7 @@ export async function batchTelemetry(req, res) {
                     source_event_id: insertedEvents.id,
                     latitude: eventData.latitude,
                     longitude: eventData.longitude,
-                    node_battery: eventData.node_battery_percent,
+                    node_battery: normalizedBatteryVoltage,
                     temperature: null,
                 };
                 const {
