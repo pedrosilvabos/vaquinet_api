@@ -242,8 +242,8 @@ async getLatestNodeEventById(req, res) {
             temperature: node.temperature,
             latitude: node.latitude,
             longitude: node.longitude,
-            node_battery: node.batteryVoltage,
-            node_battery_percent: node.batteryPercent,
+            node_battery_voltage: node.batteryVoltage,
+            node_vbus: node.vbus ?? null,
             base_battery: node.baseBatteryVoltage,
             base_battery_percent: node.baseBatteryPercent,
             node_temperature: node.event_data.temperature

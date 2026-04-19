@@ -49,9 +49,9 @@ export async function createAlert(req, res) {
           longitude: ed.longitude ?? null,
           lora_rssi: ed.lora_rssi ?? null,
           lora_snr: ed.lora_snr ?? null,
-          node_battery: ed.node_battery ?? null,
+          node_battery_voltage: ed.node_battery_voltage ?? ed.node_battery ?? null,
           node_gpsCourse: ed.node_gpsCourse ?? null,
-          node_battery_percent: ed.node_battery_percent ?? null
+          node_vbus: ed.node_vbus ?? null
         };
       }
     }
