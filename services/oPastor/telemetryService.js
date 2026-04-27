@@ -178,14 +178,19 @@ export async function batchTelemetry(req, res) {
 
             // 2) insert telemetry event
          const normalizedEventType = normalizeOptionalText(eventType) || 'STATUS';
+         const telemetryFlags = eventData.telemetry_flags ?? eventData.telemetry_mode ?? 0;
          const eventPayload = {
           node_id: nodeId,
           base_id: baseId,
           event_type: normalizedEventType,
           event_data: {
+            telemetry_flags: telemetryFlags,
             latitude: eventData.latitude ?? null,
             longitude: eventData.longitude ?? null,
             sat_count: eventData.sat_count ?? null,
+            motion_state: eventData.motion_state ?? null,
+            motion_score: eventData.motion_score ?? null,
+            motion_samples: eventData.motion_samples ?? null,
             node_battery_voltage: normalizedBatteryVoltage,
             node_vbus: normalizedVbus,
             backhaul: eventData.backhaul ?? null,
