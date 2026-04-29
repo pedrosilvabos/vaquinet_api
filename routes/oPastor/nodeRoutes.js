@@ -17,12 +17,12 @@ router.get('/latest/:id', nodeService.getLatestNodeEventById);
 router.get('/',  nodeService.getAllNodes);
 router.get('/:id/events', nodeService.getNodeEventsById);
 router.get('/:id', nodeService.getNodeById);
-router.put('/:id', nodeService.updateNode);
-router.delete('/:id', nodeService.deleteNode);
+router.put('/:id', requireBearerToken, nodeService.updateNode);
+router.delete('/:id', requireBearerToken, nodeService.deleteNode);
 
-router.post('/', nodeService.createNode);
-router.post('/batch', nodeService.batchInsertNodes);
-router.post('/sensors', nodeService.processSensorData);
-router.post('/telemetry/batch', batchTelemetry);
+router.post('/', requireBearerToken, nodeService.createNode);
+router.post('/batch', requireBearerToken, nodeService.batchInsertNodes);
+router.post('/sensors', requireBearerToken, nodeService.processSensorData);
+router.post('/telemetry/batch', requireBearerToken, batchTelemetry);
 
 export default router;

@@ -5,6 +5,7 @@ import {
   addContact,
   deleteContactById,
 } from '../../services/oPastor/phonebookService.js';
+import { requireBearerToken } from '../../middleware/auth.js';
 
 const router = express.Router();
 
@@ -12,9 +13,9 @@ const router = express.Router();
 router.get('/', getAllContacts);
 
 // add new contact
-router.post('/', addContact);
+router.post('/', requireBearerToken, addContact);
 
 // delete by id (optional)
-router.delete('/:id', deleteContactById);
+router.delete('/:id', requireBearerToken, deleteContactById);
 
 export default router;

@@ -6,11 +6,12 @@ import {
   markOrderComplete,
   markOrdersDeliveredByNode,
 } from '../../services/oPastor/ordersService.js';
+import { requireBearerToken } from '../../middleware/auth.js';
 
 const router = express.Router();
 
 router.get('/', getAllOrders);
-router.post('/', createOrder);
+router.post('/', requireBearerToken, createOrder);
 router.get('/mark/:id', markOrderComplete);
 router.get('/mark-delivered/:odeId', async (req, res) => {
   try {

@@ -2,6 +2,7 @@
 import express from 'express';
 import nodeService from '../../services/oPastor/nodeService.js';
 import { batchTelemetry } from '../../services/oPastor/telemetryService.js';
+import { requireBearerToken } from '../../middleware/auth.js';
 
 const router = express.Router();
 
@@ -12,11 +13,11 @@ router.get('/', nodeService.getAllNodes);
 router.get('/:id/events', nodeService.getNodeEventsById);
 router.get('/:id', nodeService.getNodeById);
 
-router.post('/', nodeService.createNode);
-router.put('/:id', nodeService.updateNode);
-router.delete('/:id', nodeService.deleteNode);
-router.post('/batch', nodeService.batchInsertNodes);
-router.post('/sensors', nodeService.processSensorData);
-router.post('/telemetry/batch', batchTelemetry);
+router.post('/', requireBearerToken, nodeService.createNode);
+router.put('/:id', requireBearerToken, nodeService.updateNode);
+router.delete('/:id', requireBearerToken, nodeService.deleteNode);
+router.post('/batch', requireBearerToken, nodeService.batchInsertNodes);
+router.post('/sensors', requireBearerToken, nodeService.processSensorData);
+router.post('/telemetry/batch', requireBearerToken, batchTelemetry);
 
 export default router;

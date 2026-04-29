@@ -1,6 +1,13 @@
 import { sendToToken } from "./fcm.js";
+import dotenv from "dotenv";
 
-const token = "cZMYYBHhQumDQRcLWrMoWn:APA91bGtSnaJQDBbq9jNElnW1ktQtjimmL93ibbeWch0Y_8AJaywQ1ziMTecCJGxdGkyxbVUeKPTqoPh8A-Iuf59677OW_VVpgnOo4IvaWOHyIaO60284mI";
+dotenv.config();
+
+const token = process.env.TEST_FCM_TOKEN;
+
+if (!token) {
+  throw new Error("Missing TEST_FCM_TOKEN");
+}
 
 const res = await sendToToken(token, "Test Push", "Hello from oPastor backend");
 console.log(res);
