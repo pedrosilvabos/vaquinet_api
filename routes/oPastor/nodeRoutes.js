@@ -16,6 +16,7 @@ const router = express.Router();
 router.get('/latest/:id', nodeService.getLatestNodeEventById);
 router.get('/',  nodeService.getAllNodes);
 router.get('/:id/events', nodeService.getNodeEventsById);
+router.get('/:id/activity', nodeService.getNodeActivityById);
 router.get('/:id', nodeService.getNodeById);
 router.put('/:id', requireBearerToken, nodeService.updateNode);
 router.delete('/:id', requireBearerToken, nodeService.deleteNode);

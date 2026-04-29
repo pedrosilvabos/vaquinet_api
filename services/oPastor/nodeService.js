@@ -12,6 +12,86 @@ export async function publishNodeList() {
   publish(TOPICS.ALL, data);
 }
 
+// Read-only activity derivation from existing node_events.event_data.
+// Thresholds are intentionally simple field-test assumptions, not schema changes.
+const LOW_BATTERY_VOLTAGE = 3.6;
+const ACTIVITY_EVENT_LIMIT = 50;
+
+function eventDataOf(event) {
+  return event?.event_data && typeof event.event_data === 'object' ? event.event_data : {};
+}
+
+function asNumber(value) {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function hasValidGps(data) {
+  const lat = asNumber(data.latitude ?? data.node_latitude ?? data.lat);
+  const lon = asNumber(data.longitude ?? data.node_longitude ?? data.lon ?? data.lng);
+  return lat !== null && lon !== null && lat !== 0 && lon !== 0;
+}
+
+function gpsWasReported(data) {
+  return Object.prototype.hasOwnProperty.call(data, 'latitude') ||
+    Object.prototype.hasOwnProperty.call(data, 'longitude') ||
+    Object.prototype.hasOwnProperty.call(data, 'node_latitude') ||
+    Object.prototype.hasOwnProperty.call(data, 'node_longitude') ||
+    Object.prototype.hasOwnProperty.call(data, 'lat') ||
+    Object.prototype.hasOwnProperty.call(data, 'lon') ||
+    Object.prototype.hasOwnProperty.call(data, 'lng');
+}
+
+function activityItem(type, label, severity, createdAt) {
+  return { type, label, severity, created_at: createdAt };
+}
+
+function motionActivity(data, createdAt) {
+  const motionState = asNumber(data.motion_state);
+  switch (motionState) {
+    case 0:
+      return activityItem('motion', 'Resting / low movement', 'normal', createdAt);
+    case 1:
+      return activityItem('motion', 'Walking', 'normal', createdAt);
+    case 2:
+      return activityItem('motion', 'Grazing', 'normal', createdAt);
+    case 3:
+      return activityItem('motion', 'Restless / high activity', 'attention', createdAt);
+    default:
+      return null;
+  }
+}
+
+function deriveActivityItems(event) {
+  const data = eventDataOf(event);
+  const createdAt = event.created_at;
+  const items = [];
+
+  if (data.isAlerted === true || data.is_alerted === true || data.alertType || data.alert_type) {
+    items.push(activityItem('alert', 'Alert', 'alert', createdAt));
+  }
+
+  const batteryVoltage = asNumber(data.node_battery_voltage ?? data.node_battery ?? data.batteryVoltage);
+  if (batteryVoltage !== null && batteryVoltage > 0 && batteryVoltage < LOW_BATTERY_VOLTAGE) {
+    items.push(activityItem('battery', 'Low battery', 'attention', createdAt));
+  }
+
+  const motion = motionActivity(data, createdAt);
+  if (motion) items.push(motion);
+
+  if (hasValidGps(data)) {
+    items.push(activityItem('gps', 'GPS fix', 'normal', createdAt));
+  } else if (gpsWasReported(data)) {
+    items.push(activityItem('gps', 'GPS unavailable', 'attention', createdAt));
+  }
+
+  return items;
+}
+
 const nodeService = {
   async getAllNodes(req, res) {
     console.log("[GET] Fetching all nodes");
@@ -140,6 +220,34 @@ async getLatestNodeEventById(req, res) {
       return res.status(200).json(data);
     } catch (err) {
       console.error(`[GET] Unexpected error fetching node events for ${id}:`, err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  },
+
+  async getNodeActivityById(req, res) {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Missing node ID in request parameters' });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('node_events')
+        .select('node_id, event_type, event_data, created_at')
+        .eq('node_id', id)
+        .order('created_at', { ascending: false })
+        .limit(ACTIVITY_EVENT_LIMIT);
+
+      if (error) {
+        console.error(`[GET] Error fetching activity for node ${id}:`, error.message);
+        return res.status(500).json({ error: 'Failed to fetch node activity', details: error.message });
+      }
+
+      const items = (data ?? []).flatMap(deriveActivityItems);
+      return res.status(200).json({ node_id: id, items });
+    } catch (err) {
+      console.error(`[GET] Unexpected error fetching node activity for ${id}:`, err.message);
       return res.status(500).json({ error: 'Internal server error', details: err.message });
     }
   },
