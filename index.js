@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import * as mqttService from './utils/mqttService.js';
 import opastorRouter from './routes/oPastor/index.js';
 import trailsRouter from './routes/trails/index.js';
+import farmRouter from './routes/farmRoutes.js';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.get('/health', (_req, res) => {
 });
 
 // Domain mounting
+app.use('/farm', farmRouter);
 app.use('/opastor', opastorRouter);
 app.use('/trails', trailsRouter);
 
