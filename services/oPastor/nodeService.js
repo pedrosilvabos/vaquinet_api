@@ -15,7 +15,8 @@ export async function publishNodeList() {
 // Read-only activity derivation from existing node_events.event_data.
 // Thresholds are intentionally simple field-test assumptions, not schema changes.
 const LOW_BATTERY_VOLTAGE = 3.6;
-const ACTIVITY_EVENT_LIMIT = 50;
+const DEFAULT_ACTIVITY_LIMIT = 20;
+const MAX_ACTIVITY_LIMIT = 100;
 
 function eventDataOf(event) {
   return event?.event_data && typeof event.event_data === 'object' ? event.event_data : {};
@@ -66,7 +67,17 @@ function motionActivity(data, createdAt) {
   }
 }
 
-function deriveActivityItems(event) {
+function parseActivityLimit(rawLimit) {
+  const parsed = Number.parseInt(rawLimit, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_ACTIVITY_LIMIT;
+  return Math.min(parsed, MAX_ACTIVITY_LIMIT);
+}
+
+function includeGpsFix(rawIncludeGps) {
+  return rawIncludeGps === 'true' || rawIncludeGps === '1';
+}
+
+function deriveActivityItems(event, options = {}) {
   const data = eventDataOf(event);
   const createdAt = event.created_at;
   const items = [];
@@ -84,7 +95,9 @@ function deriveActivityItems(event) {
   if (motion) items.push(motion);
 
   if (hasValidGps(data)) {
-    items.push(activityItem('gps', 'GPS fix', 'normal', createdAt));
+    if (options.includeGps) {
+      items.push(activityItem('gps', 'GPS fix', 'normal', createdAt));
+    }
   } else if (gpsWasReported(data)) {
     items.push(activityItem('gps', 'GPS unavailable', 'attention', createdAt));
   }
@@ -232,19 +245,22 @@ async getLatestNodeEventById(req, res) {
     }
 
     try {
+      const limit = parseActivityLimit(req.query.limit);
+      const includeGps = includeGpsFix(req.query.include_gps);
+
       const { data, error } = await supabase
         .from('node_events')
         .select('node_id, event_type, event_data, created_at')
         .eq('node_id', id)
         .order('created_at', { ascending: false })
-        .limit(ACTIVITY_EVENT_LIMIT);
+        .limit(limit);
 
       if (error) {
         console.error(`[GET] Error fetching activity for node ${id}:`, error.message);
         return res.status(500).json({ error: 'Failed to fetch node activity', details: error.message });
       }
 
-      const items = (data ?? []).flatMap(deriveActivityItems);
+      const items = (data ?? []).flatMap((event) => deriveActivityItems(event, { includeGps }));
       return res.status(200).json({ node_id: id, items });
     } catch (err) {
       console.error(`[GET] Unexpected error fetching node activity for ${id}:`, err.message);
