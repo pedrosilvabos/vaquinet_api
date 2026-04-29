@@ -21,6 +21,10 @@ app.use(express.json({ limit: '2mb' }));
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'opastor-api' });
+});
+
 // Domain mounting
 app.use('/opastor', opastorRouter);
 app.use('/trails', trailsRouter);
