@@ -1,143 +1,135 @@
-Vaquinet Cows API Documentation
+# oPastor API
 
-Base URL: https://nzavorpoosmaonbevcmb.supabase.co/rest/v1
-Note: This API uses Supabase PostgREST by default, so REST URLs are under /rest/v1.
-The HTML client uses Supabase JS client to interact directly.
+Node/Express API for the oPastor/Vaquinet cattle monitoring system.
 
----
+This service sits between:
 
-Authentication
+- base station firmware posting telemetry/status
+- Supabase persistence
+- FCM/push services
+- the Flutter app operational overview
 
-- Use the SUPABASE_ANON_KEY as Bearer token in the Authorization header for REST requests.
-- The client-side JS uses the anon key for safe access.
-
----
-
-Table: cows
-
-Field       | Type      | Required | Description
-------------|-----------|----------|---------------------------
-id          | integer   | Auto     | Unique cow identifier
-name        | text      | Yes      | Cow's name
-temperature | numeric   | Yes      | Cow's body temperature
-location    | text      | Yes      | Cow's current location
-created_at  | timestamp | Yes      | Record creation timestamp
+The current server entrypoint is `index.js`.
 
 ---
 
-Endpoints
+## Quick start
 
-1. Get all cows
+```bash
+npm install
+npm start
+```
 
-Request:
-GET /cows
-Authorization: Bearer <SUPABASE_ANON_KEY>
+Default port:
 
-Response Example:
-[
-  {
-    "id": 1,
-    "name": "FLORIBELA",
-    "temperature": 38.5,
-    "location": "Pasture 1",
-    "created_at": "2025-05-23T13:19:50.670968+00:00"
-  },
-  {
-    "id": 2,
-    "name": "BELA VISTA",
-    "temperature": 39.1,
-    "location": "Stable 2",
-    "created_at": "2025-05-24T09:00:00.000000+00:00"
-  }
-]
+```text
+10001
+```
 
----
+Health check:
 
-2. Add a new cow
+```http
+GET /health
+```
 
-Request:
-POST /cows
-Authorization: Bearer <SUPABASE_ANON_KEY>
-Content-Type: application/json
+Expected response:
 
+```json
 {
-  "name": "FLORIBELA",
-  "temperature": 38.5,
-  "location": "Pasture 1",
-  "created_at": "2025-05-23T13:19:50.670968+00:00"
+  "ok": true,
+  "service": "opastor-api"
 }
-
-Response Example:
-{
-  "id": 3,
-  "name": "FLORIBELA",
-  "temperature": 38.5,
-  "location": "Pasture 1",
-  "created_at": "2025-05-23T13:19:50.670968+00:00"
-}
-
-Notes:
-- name, temperature, and location are required fields.
-- created_at can be omitted, and the server will assign the current timestamp.
+```
 
 ---
 
-3. Delete a cow by ID
+## Endpoint documentation
 
-Request:
-DELETE /cows?id=eq.3
-Authorization: Bearer <SUPABASE_ANON_KEY>
+See:
 
-Or
+- [`ENDPOINTS.md`](./ENDPOINTS.md) - route structure, auth expectations, and example requests/responses
+- `../contracts/telemetry_v1.md` - telemetry field contract and naming source of truth
 
-DELETE /cows/3
-Authorization: Bearer <SUPABASE_ANON_KEY>
+The most important app endpoint is:
 
-Response:
-204 No Content on success
+```http
+GET /farm/overview
+```
 
-Example:
-Cow with ID 3 deleted.
+It returns all nodes, latest telemetry, backend-derived cow status, last coordinates, and base summaries in one request.
 
 ---
 
-JavaScript (Supabase client) usage examples
+## Authentication model
 
-import { createClient } from '@supabase/supabase-js'
+Read routes are currently public.
 
-const supabaseUrl = 'https://nzavorpoosmaonbevcmb.supabase.co/';
-const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
-const supabase = createClient(supabaseUrl, supabaseKey);
+Write routes require:
 
-// Fetch cows
-const { data: cows, error } = await supabase.from('cows').select('*');
-if (error) console.error(error);
-else console.log(cows);
+```http
+Authorization: Bearer <API_TOKEN>
+```
 
-// Add cow
-const { data, error: insertError } = await supabase
-  .from('cows')
-  .insert([{ name: 'FLORIBELA', temperature: 38.5, location: 'Pasture 1' }])
-  .select()
-  .single();
-if (insertError) console.error(insertError);
-else console.log('Added cow:', data);
+Tokens are validated by `middleware/auth.js` against configured API token storage.
 
-// Delete cow
-const { error: deleteError } = await supabase
-  .from('cows')
-  .delete()
-  .eq('id', 3);
-if (deleteError) console.error(deleteError);
-else console.log('Deleted cow with ID 3');
+Do not commit tokens, service accounts, or `.env` files.
 
 ---
 
-Notes
+## Environment variables
 
-- Make sure your Supabase table 'cows' has columns matching the API.
-- The anon key allows read/write access depending on your Supabase Row Level Security (RLS) policies.
-- Use the Supabase JS client in browser or Node.js for easy integration.
-- For REST direct requests, always send Authorization: Bearer <anon_key> header.
+Firebase service account values are loaded from environment variables, not checked-in JSON files:
+
+```text
+FIREBASE_PROJECT_ID
+FIREBASE_CLIENT_EMAIL
+FIREBASE_PRIVATE_KEY
+```
+
+Useful test/dev variables:
+
+```text
+PORT=10001
+TEST_FCM_TOKEN=<local test token>
+```
 
 ---
+
+## Current architecture notes
+
+- `/farm/overview` is the app's primary operational read path.
+- Telemetry ingestion writes extra v1 fields into JSON `event_data`; no schema change required.
+- `/opastor/nodes/:id/activity` is read-only and derives compact timeline items from `node_events`.
+- Backend-derived cow status is generated in `services/oPastor/farmService.js` from latest telemetry plus recent `node_events` behavior.
+- Existing legacy aliases are preserved where already supported.
+
+---
+
+## Validation commands
+
+Syntax check a service file:
+
+```bash
+node --check services/oPastor/farmService.js
+```
+
+Run locally on alternate port:
+
+```bash
+PORT=10141 node index.js
+```
+
+Probe overview:
+
+```bash
+node -e "fetch('http://127.0.0.1:10141/farm/overview').then(r=>r.json()).then(j=>console.log(JSON.stringify(j.nodes?.[0], null, 2)))"
+```
+
+---
+
+## Safety rules
+
+- No database schema changes unless explicitly planned.
+- Keep write routes authenticated.
+- Keep secrets in env/local ignored files only.
+- Prefer additive response fields over breaking existing app contracts.
