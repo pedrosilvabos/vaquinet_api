@@ -108,18 +108,20 @@ export async function postBaseStatus(req, res) {
 }
 
 export async function batchTelemetry(req, res) {
-    const {
-        data
-    } = req.body;
-    if (!Array.isArray(data)) {
+    const items = Array.isArray(req.body?.data)
+        ? req.body.data
+        : Array.isArray(req.body?.events)
+        ? req.body.events
+        : null;
+    if (!items) {
         return res.status(400).json({
-            error: 'Invalid payload: expected array in `data`'
+            error: 'Invalid payload: expected array in `data` or `events`'
         });
     }
 
     const results = [];
 
-    for (const node of data) {
+    for (const node of items) {
         const nodeId = node.node_id;
         const baseId = node.base_id || null;
         const farmId = '9d97817a-4c54-4c1b-9f83-92df8fa1737a';
@@ -152,7 +154,7 @@ export async function batchTelemetry(req, res) {
                 birth_date: normalizeOptionalDate(node.birth_date),
                 breed: normalizeOptionalText(node.breed),
             };
-            console.log('incoming node event_data keys:', ...new Set(data.flatMap(d => Object.keys(d?.event_data || {}))));
+            console.log('incoming node event_data keys:', ...new Set(items.flatMap(d => Object.keys(d?.event_data || {}))));
 
             const {
                 data: existingNode,
@@ -229,7 +231,7 @@ export async function batchTelemetry(req, res) {
                 continue;
             }
 
-            publish(TOPICS.TELEMETRY, data);
+            publish(TOPICS.TELEMETRY, items);
 
             // 3) explicit alert rows
             if (normalizedEventType !== 'STATUS') {
@@ -320,7 +322,7 @@ export async function batchTelemetry(req, res) {
 
     return res.status(200).json({
         message: 'Telemetry data processed',
-        seen_event_data_keys: [...new Set(data.flatMap(d => Object.keys(d?.event_data || {})))],
+        seen_event_data_keys: [...new Set(items.flatMap(d => Object.keys(d?.event_data || {})))],
         results
     });
 }

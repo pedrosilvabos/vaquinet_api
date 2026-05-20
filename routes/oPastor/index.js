@@ -7,6 +7,7 @@ import ordersRoutes from './ordersRoutes.js';
 import fenceRoutes from './fenceRoutes.js';
 import configRoutes from './configRoutes.js';
 import phonebookRoutes from './phonebookRoutes.js';
+import calibrationRoutes from './calibrationRoutes.js';
 
 const router = express.Router();
 
@@ -18,5 +19,6 @@ router.use('/orders', ordersRoutes);
 router.use('/fences', fenceRoutes);
 router.use('/config', configRoutes);
 router.use('/phonebook', phonebookRoutes);
+router.use('/calibration', calibrationRoutes);
 
 export default router;
