@@ -49,6 +49,26 @@ function normalizeOptionalDate(value) {
     return normalized;
 }
 
+function normalizeFiniteNumber(value, fallback) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+}
+
+function normalizeMotionWindow(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+    return {
+        interval_s: normalizeFiniteNumber(value.interval_s ?? 60, 60),
+        count: normalizeFiniteNumber(value.count ?? 0, 0),
+        valid: normalizeFiniteNumber(value.valid ?? 0, 0),
+        avg: normalizeFiniteNumber(value.avg ?? 0, 0),
+        min: normalizeFiniteNumber(value.min ?? 0, 0),
+        max: normalizeFiniteNumber(value.max ?? 0, 0),
+        spikes: normalizeFiniteNumber(value.spikes ?? 0, 0),
+        scores_hex: String(value.scores_hex ?? ''),
+    };
+}
+
 function shouldNotify(nodeId) {
     const now = Date.now();
     const prev = lastAlertAt.get(nodeId) || 0;
@@ -181,6 +201,7 @@ export async function batchTelemetry(req, res) {
             // 2) insert telemetry event
          const normalizedEventType = normalizeOptionalText(eventType) || 'STATUS';
          const telemetryFlags = eventData.telemetry_flags ?? eventData.telemetry_mode ?? 0;
+         const motionWindow = normalizeMotionWindow(eventData.motion_window);
          const eventPayload = {
           node_id: nodeId,
           base_id: baseId,
@@ -213,6 +234,7 @@ export async function batchTelemetry(req, res) {
             lte_signal_quality: eventData.lte_signal_quality ?? eventData.lteSignalQuality ?? null,
             lora_rssi: eventData.lora_rssi ?? null,
             lora_snr: eventData.lora_snr ?? null,
+            ...(motionWindow ? { motion_window: motionWindow } : {}),
           },
         };
 
