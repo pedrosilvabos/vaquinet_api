@@ -11,6 +11,9 @@ import {
 import {
     sendToTopic
 } from '../../fcm.js';
+import {
+    analyzeNodeEvent
+} from './behavior/behaviorAnalysisService.js';
 
 const AlertTypes = {
     1: 'LOW_BATTERY',
@@ -251,6 +254,35 @@ export async function batchTelemetry(req, res) {
                     error: eventError.message
                 });
                 continue;
+            }
+
+            try {
+                const behaviorResult = await analyzeNodeEvent({
+                    id: insertedEvents.id,
+                    node_id: eventPayload.node_id,
+                    base_id: eventPayload.base_id,
+                    event_data: eventPayload.event_data,
+                });
+                if (behaviorResult?.ok === false) {
+                    console.warn('[behavior] analysis failed:', {
+                        nodeId,
+                        nodeEventId: insertedEvents.id,
+                        error: behaviorResult.error,
+                    });
+                } else if (behaviorResult?.status && behaviorResult.status !== 'inserted' && behaviorResult.reason !== 'missing_motion_window') {
+                    console.debug?.('[behavior] analysis skipped:', {
+                        nodeId,
+                        nodeEventId: insertedEvents.id,
+                        status: behaviorResult.status,
+                        reason: behaviorResult.reason,
+                    });
+                }
+            } catch (behaviorError) {
+                console.warn('[behavior] analysis threw:', {
+                    nodeId,
+                    nodeEventId: insertedEvents.id,
+                    error: behaviorError?.message || String(behaviorError),
+                });
             }
 
             publish(TOPICS.TELEMETRY, items);
