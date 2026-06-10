@@ -1,6 +1,11 @@
 import { opastorDb as supabase } from '../../config/supabase.js';
 import { publish, TOPICS } from '../../utils/mqttService.js';
 import { getDistance } from '../../utils/geoUtils.js';
+import {
+  buildMovementTimeline,
+  movementTimelineBufferStartIso,
+  SUPPORTED_MOVEMENT_TIMELINE_RANGES,
+} from './movementTimelineService.js';
 
 export async function publishNodeList() {
   const { data, error } = await supabase.from('nodes').select('*');
@@ -264,6 +269,57 @@ async getLatestNodeEventById(req, res) {
       return res.status(200).json({ node_id: id, items });
     } catch (err) {
       console.error(`[GET] Unexpected error fetching node activity for ${id}:`, err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  },
+
+  async getNodeMovementTimelineById(req, res) {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Missing node ID in request parameters' });
+    }
+
+    try {
+      const range = typeof req.query.range === 'string' && req.query.range.trim()
+        ? req.query.range.trim()
+        : '1h';
+      const bufferStartIso = movementTimelineBufferStartIso(range);
+
+      if (!bufferStartIso) {
+        return res.status(400).json({
+          ok: false,
+          error: 'unsupported_range',
+          supported_ranges: SUPPORTED_MOVEMENT_TIMELINE_RANGES,
+        });
+      }
+
+      const rangeEndIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('node_events')
+        .select('id,node_id,event_data,created_at')
+        .eq('node_id', id)
+        .gte('created_at', bufferStartIso)
+        .lte('created_at', rangeEndIso)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error(`[GET] Error fetching movement timeline for node ${id}:`, error.message);
+        return res.status(500).json({ error: 'Failed to fetch node movement timeline', details: error.message });
+      }
+
+      const timeline = buildMovementTimeline(data ?? [], range, new Date(rangeEndIso));
+      return res.status(200).json({
+        ok: true,
+        node_id: id,
+        range: timeline.range,
+        interval_s: timeline.interval_s,
+        intervals_s: timeline.intervals_s,
+        items: timeline.items,
+        meta: timeline.meta,
+      });
+    } catch (err) {
+      console.error(`[GET] Unexpected error fetching movement timeline for ${id}:`, err.message);
       return res.status(500).json({ error: 'Internal server error', details: err.message });
     }
   },
