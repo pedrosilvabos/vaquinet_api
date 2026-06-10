@@ -218,6 +218,8 @@ When a telemetry event includes `event_data.motion_window`, Phase 1 behavior ana
 
 Behavior analysis is non-blocking. If feature extraction or insert fails, telemetry ingestion, MQTT publishing, push flow, and the HTTP response should continue. Phase 1 behavior analytics does not create alerts and does not change app-facing status.
 
+`public.latest_node_behavior` is the read-only latest-node behavior display view. It joins `public.latest_node_events` to `public.behavior_features` for `feature_version = phase1_v1`, keeping latest node events visible even when behavior fields are still `null`.
+
 Older motion-window telemetry may not have `behavior_features` rows unless it was ingested after the hook was added or a backfill is implemented later. Backfill is intentionally not implemented yet.
 
 Example body:
@@ -366,6 +368,7 @@ This route exists for compatibility. Check `routes/trails/` before extending it;
 - Keep activity history read-only and derived from `node_events`.
 - Keep behavior analysis out of routes; Phase 1 runs after telemetry persistence through `services/oPastor/behavior/behaviorAnalysisService.js`.
 - Keep behavior analytics non-blocking. It must not break raw telemetry ingestion.
+- Use `public.latest_node_behavior` for read-only latest telemetry plus Phase 1 behavior display data.
 - Treat Phase 1 behavior outputs as calibration/analysis only, not animal-health diagnosis.
 - Prefer adding fields over breaking existing response shape.
 - Keep writes behind bearer auth.

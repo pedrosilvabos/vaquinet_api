@@ -114,6 +114,8 @@ The behavior hook is non-blocking for ingestion: analysis errors are logged ligh
 
 Derived features are stored in `public.behavior_features` with `feature_version = phase1_v1`. This table is analytics/derived data, not raw truth. `behavior_features.node_event_id` is text, references `public.node_events(id)` with `ON DELETE CASCADE`, and is unique together with `feature_version`.
 
+`public.latest_node_behavior` is a read-only display view that joins `public.latest_node_events` to Phase 1 `behavior_features`. Latest node events still appear when no behavior row exists yet; behavior fields are `null` in that case.
+
 The current field data comes from a restricted, roughly 3-week-old calf moving within about a 10m radius. Treat it as restricted-mobility baseline data, not normal herd behavior. Current behavior outputs are for calibration and analysis only; they are not animal-health diagnosis.
 
 Older telemetry rows may not have behavior rows unless they were ingested after the hook was added or are backfilled later. Backfill is intentionally not implemented yet.
@@ -176,6 +178,16 @@ where fl.first_created_at is not null
   and ne.created_at >= fl.first_created_at
   and ne.event_data ? 'motion_window'
   and bf.id is null;
+```
+
+Check latest-node behavior display coverage:
+
+```sql
+select
+  'latest_node_behavior_rows=' || count(*)::text ||
+  ', with_behavior=' || count(behavior_feature_id)::text ||
+  ', without_behavior=' || (count(*) - count(behavior_feature_id))::text as result
+from public.latest_node_behavior;
 ```
 
 Latest verified live-pipeline check:
