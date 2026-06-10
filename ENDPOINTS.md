@@ -214,6 +214,12 @@ Legacy sensor ingestion route. Keep for compatibility.
 
 Base station telemetry ingestion. Persists canonical telemetry fields inside `event_data` without schema changes.
 
+When a telemetry event includes `event_data.motion_window`, Phase 1 behavior analytics decodes `motion_window.scores_hex` and stores derived features in `public.behavior_features` after the raw `node_events` row is inserted. Raw `node_events` remains the source of truth; `behavior_features` is derived analytics data.
+
+Behavior analysis is non-blocking. If feature extraction or insert fails, telemetry ingestion, MQTT publishing, push flow, and the HTTP response should continue. Phase 1 behavior analytics does not create alerts and does not change app-facing status.
+
+Older motion-window telemetry may not have `behavior_features` rows unless it was ingested after the hook was added or a backfill is implemented later. Backfill is intentionally not implemented yet.
+
 Example body:
 
 ```json
@@ -229,6 +235,16 @@ Example body:
         "longitude": -25.675,
         "motion_state": 2,
         "motion_score": 61,
+        "motion_window": {
+          "avg": 45,
+          "max": 163,
+          "min": 3,
+          "count": 14,
+          "valid": 14,
+          "spikes": 0,
+          "interval_s": 60,
+          "scores_hex": "1E161B111C1A11300352A3153965"
+        },
         "lora_rssi": "-92",
         "lora_snr": "7.5",
         "node_battery_voltage": 3.92,
@@ -348,5 +364,8 @@ This route exists for compatibility. Check `routes/trails/` before extending it;
 - Do not change database schema casually; current telemetry extensions live in JSON fields.
 - Keep `/farm/overview` as the app's primary operational read endpoint.
 - Keep activity history read-only and derived from `node_events`.
+- Keep behavior analysis out of routes; Phase 1 runs after telemetry persistence through `services/oPastor/behavior/behaviorAnalysisService.js`.
+- Keep behavior analytics non-blocking. It must not break raw telemetry ingestion.
+- Treat Phase 1 behavior outputs as calibration/analysis only, not animal-health diagnosis.
 - Prefer adding fields over breaking existing response shape.
 - Keep writes behind bearer auth.
