@@ -37,7 +37,7 @@ Example response:
 
 ### `GET /farm/overview`
 
-Primary operational read endpoint for the mobile app. Returns all nodes with latest telemetry, last known coordinates, backend-derived status, and latest base statuses.
+Primary operational read endpoint for the mobile app. Returns all nodes with latest telemetry, nullable Phase 1 behavior analytics, last known coordinates, backend-derived status, and latest base statuses.
 
 Example response:
 
@@ -71,6 +71,26 @@ Example response:
         "label": "Normal",
         "severity": "normal",
         "reason": null
+      },
+      "behavior": {
+        "node_event_id": "event_uuid",
+        "behavior_feature_id": "feature_uuid",
+        "behavior_created_at": "2026-06-10T20:00:00.000Z",
+        "movement_mode": "active_local",
+        "sample_quality": "ok",
+        "sample_count": 14,
+        "valid_count": 14,
+        "count_mismatch": false,
+        "score_min": 30,
+        "score_max": 55,
+        "score_avg": 43.57142857142857,
+        "score_range": 25,
+        "score_stddev": 8.4,
+        "quiet_ratio": 0,
+        "active_ratio": 1,
+        "spike_count": 0,
+        "inactivity_candidate": false,
+        "abnormal_activity_candidate": false
       },
       "last_lat": 37.741,
       "last_lng": -25.675
@@ -109,6 +129,16 @@ Priority order:
    - none of the above
 
 Recent behavior is fetched in bulk from `node_events` for all nodes to avoid N+1 queries.
+
+### `behavior` object
+
+`behavior` is a nullable Phase 1 analytics object from `public.latest_node_behavior`. It is read-only display support for calibration and analysis, not diagnosis, prediction, or alerting. If the latest event has no matching behavior row yet, `behavior` is `null`.
+
+Example REST probe:
+
+```bash
+curl http://localhost:10001/farm/overview
+```
 
 ---
 

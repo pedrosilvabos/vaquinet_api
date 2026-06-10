@@ -168,12 +168,43 @@ function latestByBaseId(rows) {
   return [...byBase.values()];
 }
 
+function normalizeBehavior(row) {
+  if (!row?.behavior_feature_id) return null;
+
+  return {
+    node_event_id: row.node_event_id,
+    behavior_feature_id: row.behavior_feature_id,
+    behavior_created_at: row.behavior_created_at,
+    movement_mode: row.movement_mode,
+    sample_quality: row.sample_quality,
+    sample_count: row.sample_count,
+    valid_count: row.valid_count,
+    count_mismatch: row.count_mismatch,
+    score_min: row.score_min,
+    score_max: row.score_max,
+    score_avg: row.score_avg,
+    score_range: row.score_range,
+    score_stddev: row.score_stddev,
+    quiet_ratio: row.quiet_ratio,
+    active_ratio: row.active_ratio,
+    spike_count: row.spike_count,
+    inactivity_candidate: row.inactivity_candidate,
+    abnormal_activity_candidate: row.abnormal_activity_candidate,
+  };
+}
+
 const farmService = {
   async getOverview(_req, res) {
     try {
       const recentWindowStart = new Date(Date.now() - RECENT_BEHAVIOR_WINDOW_MS).toISOString();
 
-      const [nodesResult, latestEventsResult, baseStatusResult, recentEventsResult] = await Promise.all([
+      const [
+        nodesResult,
+        latestEventsResult,
+        latestBehaviorResult,
+        baseStatusResult,
+        recentEventsResult,
+      ] = await Promise.all([
         supabase
           .from('nodes')
           .select('id,name,tag_id,birth_date,breed,status,created_at')
@@ -181,6 +212,11 @@ const farmService = {
         supabase
           .from('latest_node_events')
           .select('id,node_id,base_id,event_type,event_data,created_at'),
+        supabase
+          .from('latest_node_behavior')
+          .select(
+            'node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate',
+          ),
         supabase
           .from('base_status')
           .select('base_id,status_type,status_data,created_at')
@@ -196,11 +232,15 @@ const farmService = {
 
       if (nodesResult.error) throw nodesResult.error;
       if (latestEventsResult.error) throw latestEventsResult.error;
+      if (latestBehaviorResult.error) throw latestBehaviorResult.error;
       if (baseStatusResult.error) throw baseStatusResult.error;
       if (recentEventsResult.error) throw recentEventsResult.error;
 
       const latestByNodeId = new Map(
         (latestEventsResult.data || []).map((event) => [event.node_id, event]),
+      );
+      const behaviorByNodeId = new Map(
+        (latestBehaviorResult.data || []).map((row) => [row.node_id, normalizeBehavior(row)]),
       );
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
 
@@ -217,6 +257,7 @@ const farmService = {
           status: node.status,
           created_at: node.created_at,
           latest_event: latestEvent,
+          behavior: behaviorByNodeId.get(node.id) || null,
           derived_status: deriveNodeStatus(latestEvent, recentByNodeId.get(node.id) || []),
           last_lat,
           last_lng,

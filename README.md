@@ -114,7 +114,7 @@ The behavior hook is non-blocking for ingestion: analysis errors are logged ligh
 
 Derived features are stored in `public.behavior_features` with `feature_version = phase1_v1`. This table is analytics/derived data, not raw truth. `behavior_features.node_event_id` is text, references `public.node_events(id)` with `ON DELETE CASCADE`, and is unique together with `feature_version`.
 
-`public.latest_node_behavior` is a read-only display view that joins `public.latest_node_events` to Phase 1 `behavior_features`. Latest node events still appear when no behavior row exists yet; behavior fields are `null` in that case.
+`public.latest_node_behavior` is a read-only display view that joins `public.latest_node_events` to Phase 1 `behavior_features`. `/farm/overview` exposes this as a nullable `behavior` object on each node. Latest node events still appear when no behavior row exists yet; `behavior` is `null` in that case.
 
 The current field data comes from a restricted, roughly 3-week-old calf moving within about a 10m radius. Treat it as restricted-mobility baseline data, not normal herd behavior. Current behavior outputs are for calibration and analysis only; they are not animal-health diagnosis.
 
@@ -218,6 +218,12 @@ Probe overview:
 
 ```bash
 node -e "fetch('http://127.0.0.1:10141/farm/overview').then(r=>r.json()).then(j=>console.log(JSON.stringify(j.nodes?.[0], null, 2)))"
+```
+
+Probe latest behavior fields through REST:
+
+```bash
+curl http://127.0.0.1:10141/farm/overview
 ```
 
 ---
