@@ -19,6 +19,7 @@ router.get('/',  nodeService.getAllNodes);
 router.get('/:id/events', nodeService.getNodeEventsById);
 router.get('/:id/activity', nodeService.getNodeActivityById);
 router.get('/:id/movement-timeline', nodeService.getNodeMovementTimelineById);
+router.get('/:id/battery-timeline', nodeService.getNodeBatteryTimelineById);
 router.get('/:id/behavior-observations', behaviorObservationService.listObservations);
 router.get('/:id/behavior-observations/active', behaviorObservationService.getActiveObservation);
 router.post('/:id/behavior-observations/start', behaviorObservationService.startObservation);

@@ -6,6 +6,11 @@ import {
   movementTimelineBufferStartIso,
   SUPPORTED_MOVEMENT_TIMELINE_RANGES,
 } from './movementTimelineService.js';
+import {
+  buildBatteryTimeline,
+  SUPPORTED_BATTERY_TIMELINE_RANGES,
+  timelineWindow as batteryTimelineWindow,
+} from './batteryTimelineService.js';
 
 export async function publishNodeList() {
   const { data, error } = await supabase.from('nodes').select('*');
@@ -320,6 +325,54 @@ async getLatestNodeEventById(req, res) {
       });
     } catch (err) {
       console.error(`[GET] Unexpected error fetching movement timeline for ${id}:`, err.message);
+      return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  },
+
+  async getNodeBatteryTimelineById(req, res) {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Missing node ID in request parameters' });
+    }
+
+    try {
+      const range = typeof req.query.range === 'string' && req.query.range.trim()
+        ? req.query.range.trim()
+        : '24h';
+      const window = batteryTimelineWindow(range);
+
+      if (!window.ok) {
+        return res.status(400).json({
+          ok: false,
+          error: 'unsupported_range',
+          supported_ranges: SUPPORTED_BATTERY_TIMELINE_RANGES,
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('node_events')
+        .select('id,node_id,event_data,created_at')
+        .eq('node_id', id)
+        .gte('created_at', window.rangeStart.toISOString())
+        .lte('created_at', window.rangeEnd.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error(`[GET] Error fetching battery timeline for node ${id}:`, error.message);
+        return res.status(500).json({ error: 'Failed to fetch node battery timeline', details: error.message });
+      }
+
+      const timeline = buildBatteryTimeline(data ?? [], range, window.rangeEnd);
+      return res.status(200).json({
+        ok: true,
+        node_id: id,
+        range: timeline.range,
+        items: timeline.items,
+        meta: timeline.meta,
+      });
+    } catch (err) {
+      console.error(`[GET] Unexpected error fetching battery timeline for ${id}:`, err.message);
       return res.status(500).json({ error: 'Internal server error', details: err.message });
     }
   },
