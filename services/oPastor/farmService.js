@@ -52,6 +52,39 @@ function eventDataOf(event) {
   return event?.event_data && typeof event.event_data === 'object' ? event.event_data : {};
 }
 
+function normalizeLegacyBasePowerPlaceholders(event) {
+  if (!event) {
+    return event;
+  }
+  const eventData = eventDataOf(event);
+
+  const hasBaseBattery = Object.prototype.hasOwnProperty.call(eventData, 'base_battery');
+  const hasBaseBatteryPercent = Object.prototype.hasOwnProperty.call(eventData, 'base_battery_percent');
+  const hasBaseVbus = Object.prototype.hasOwnProperty.call(eventData, 'base_vbus');
+
+  if (!hasBaseBattery || !hasBaseBatteryPercent || !hasBaseVbus) {
+    return event;
+  }
+
+  const baseBattery = asNumber(eventData.base_battery);
+  const baseBatteryPercent = asNumber(eventData.base_battery_percent);
+  const baseVbus = asNumber(eventData.base_vbus);
+
+  if (baseBattery !== 0 || baseBatteryPercent !== 0 || baseVbus !== 0) {
+    return event;
+  }
+
+  return {
+    ...event,
+    event_data: {
+      ...eventData,
+      base_battery: null,
+      base_battery_percent: null,
+      base_vbus: null,
+    },
+  };
+}
+
 function hasExplicitAlert(event) {
   const data = eventDataOf(event);
   const isAlerted = asBoolean(data.isAlerted ?? data.is_alerted);
@@ -245,7 +278,7 @@ const farmService = {
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
 
       const nodes = (nodesResult.data || []).map((node) => {
-        const latestEvent = latestByNodeId.get(node.id) || null;
+        const latestEvent = normalizeLegacyBasePowerPlaceholders(latestByNodeId.get(node.id) || null);
         const { last_lat, last_lng } = resolveLastPosition(latestEvent);
 
         return {
