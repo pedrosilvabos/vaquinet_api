@@ -1,4 +1,4 @@
-import { opastorDb as supabase } from '../../config/supabase.js';
+import { opastorDb as supabase } from "../../config/supabase.js";
 
 // Status derivation thresholds. Keep these conservative: they are API-side
 // presentation hints, not persisted animal health diagnoses.
@@ -8,17 +8,24 @@ const LOW_BATTERY_VOLTAGE = 3.6; // below this is field-actionable attention.
 const RESTLESS_REPEAT_THRESHOLD = 2; // motion_state 3 repeated 2+ times => Atenção.
 const STILL_REPEAT_THRESHOLD = 6; // repeated stillness in recent window => Atenção.
 const RECENT_EVENTS_BULK_LIMIT = 5000; // safety cap; avoids per-node queries.
+const GPS_CONFIG_STATE = {
+  saved: "Guardado",
+  pending: "A aguardar sincronização da coleira",
+  applied: "Aplicado",
+  stale: "Coleira sem dados recentes",
+  unknown: "Estado desconhecido",
+};
 
 const DERIVED_STATUS = {
-  normal: { label: 'Normal', severity: 'normal', reason: null },
-  attention: (reason) => ({ label: 'Atenção', severity: 'attention', reason }),
-  alert: (reason) => ({ label: 'Alerta', severity: 'alert', reason }),
-  offline: (reason) => ({ label: 'Offline', severity: 'offline', reason }),
+  normal: { label: "Normal", severity: "normal", reason: null },
+  attention: (reason) => ({ label: "Atenção", severity: "attention", reason }),
+  alert: (reason) => ({ label: "Alerta", severity: "alert", reason }),
+  offline: (reason) => ({ label: "Offline", severity: "offline", reason }),
 };
 
 function asNumber(value) {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string' && value.trim() !== '') {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -26,12 +33,12 @@ function asNumber(value) {
 }
 
 function asBoolean(value) {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value === 1;
-  if (typeof value === 'string') {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    if (['true', '1', 'yes'].includes(normalized)) return true;
-    if (['false', '0', 'no'].includes(normalized)) return false;
+    if (["true", "1", "yes"].includes(normalized)) return true;
+    if (["false", "0", "no"].includes(normalized)) return false;
   }
   return null;
 }
@@ -49,7 +56,9 @@ function isValidLatLng(lat, lng) {
 }
 
 function eventDataOf(event) {
-  return event?.event_data && typeof event.event_data === 'object' ? event.event_data : {};
+  return event?.event_data && typeof event.event_data === "object"
+    ? event.event_data
+    : {};
 }
 
 function normalizeLegacyBasePowerPlaceholders(event) {
@@ -58,9 +67,18 @@ function normalizeLegacyBasePowerPlaceholders(event) {
   }
   const eventData = eventDataOf(event);
 
-  const hasBaseBattery = Object.prototype.hasOwnProperty.call(eventData, 'base_battery');
-  const hasBaseBatteryPercent = Object.prototype.hasOwnProperty.call(eventData, 'base_battery_percent');
-  const hasBaseVbus = Object.prototype.hasOwnProperty.call(eventData, 'base_vbus');
+  const hasBaseBattery = Object.prototype.hasOwnProperty.call(
+    eventData,
+    "base_battery",
+  );
+  const hasBaseBatteryPercent = Object.prototype.hasOwnProperty.call(
+    eventData,
+    "base_battery_percent",
+  );
+  const hasBaseVbus = Object.prototype.hasOwnProperty.call(
+    eventData,
+    "base_vbus",
+  );
 
   if (!hasBaseBattery || !hasBaseBatteryPercent || !hasBaseVbus) {
     return event;
@@ -90,8 +108,13 @@ function hasExplicitAlert(event) {
   const isAlerted = asBoolean(data.isAlerted ?? data.is_alerted);
   if (isAlerted === true) return true;
 
-  const alertType = (data.alertType ?? data.alert_type)?.toString().trim().toLowerCase();
-  return Boolean(alertType && !['none', 'normal', 'false', '0'].includes(alertType));
+  const alertType = (data.alertType ?? data.alert_type)
+    ?.toString()
+    .trim()
+    .toLowerCase();
+  return Boolean(
+    alertType && !["none", "normal", "false", "0"].includes(alertType),
+  );
 }
 
 function gpsExpected(event) {
@@ -107,7 +130,9 @@ function hasValidGps(event) {
 
 function batteryVoltage(event) {
   const data = eventDataOf(event);
-  return asNumber(data.node_battery_voltage ?? data.node_battery ?? data.batteryVoltage);
+  return asNumber(
+    data.node_battery_voltage ?? data.node_battery ?? data.batteryVoltage,
+  );
 }
 
 function motionState(event) {
@@ -127,16 +152,19 @@ function groupEventsByNodeId(events) {
 
 function deriveNodeStatus(latestEvent, recentEvents) {
   if (!latestEvent) {
-    return DERIVED_STATUS.offline('No telemetry received');
+    return DERIVED_STATUS.offline("No telemetry received");
   }
 
   const latestAt = Date.parse(latestEvent.created_at);
-  if (!Number.isFinite(latestAt) || Date.now() - latestAt >= OFFLINE_THRESHOLD_MS) {
-    return DERIVED_STATUS.offline('Latest telemetry is stale');
+  if (
+    !Number.isFinite(latestAt) ||
+    Date.now() - latestAt >= OFFLINE_THRESHOLD_MS
+  ) {
+    return DERIVED_STATUS.offline("Latest telemetry is stale");
   }
 
   if (hasExplicitAlert(latestEvent) || recentEvents.some(hasExplicitAlert)) {
-    return DERIVED_STATUS.alert('Explicit alert flag in recent telemetry');
+    return DERIVED_STATUS.alert("Explicit alert flag in recent telemetry");
   }
 
   const voltage = batteryVoltage(latestEvent);
@@ -145,18 +173,20 @@ function deriveNodeStatus(latestEvent, recentEvents) {
   }
 
   if (gpsExpected(latestEvent) && !hasValidGps(latestEvent)) {
-    return DERIVED_STATUS.attention('GPS expected but latest fix is invalid');
+    return DERIVED_STATUS.attention("GPS expected but latest fix is invalid");
   }
 
-  const motionStates = recentEvents.map(motionState).filter((state) => state !== null);
+  const motionStates = recentEvents
+    .map(motionState)
+    .filter((state) => state !== null);
   const restlessCount = motionStates.filter((state) => state === 3).length;
   if (restlessCount >= RESTLESS_REPEAT_THRESHOLD) {
-    return DERIVED_STATUS.attention('Repeated restless/high activity');
+    return DERIVED_STATUS.attention("Repeated restless/high activity");
   }
 
   const stillCount = motionStates.filter((state) => state === 0).length;
   if (stillCount >= STILL_REPEAT_THRESHOLD) {
-    return DERIVED_STATUS.attention('Repeated stillness in recent window');
+    return DERIVED_STATUS.attention("Repeated stillness in recent window");
   }
 
   return DERIVED_STATUS.normal;
@@ -182,7 +212,8 @@ function normalizeBaseStatus(row) {
     status_type: row.status_type,
     status_data: {
       ...statusData,
-      backhaul_name: statusData.backhaul_name ?? statusData.operator_name ?? null,
+      backhaul_name:
+        statusData.backhaul_name ?? statusData.operator_name ?? null,
       backhaul_signal_percent:
         statusData.backhaul_signal_percent ?? statusData.signal_percent ?? null,
     },
@@ -226,59 +257,138 @@ function normalizeBehavior(row) {
   };
 }
 
+function normalizeGpsProfile(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["off", "occasional", "balanced", "frequent"].includes(normalized)) {
+    return normalized;
+  }
+
+  return null;
+}
+
+function deriveGpsConfigState(desiredConfig, latestEvent) {
+  if (!desiredConfig || typeof desiredConfig !== "object") {
+    return null;
+  }
+
+  const desiredVersion = asNumber(desiredConfig.gps_config_version);
+  const desiredProfile = normalizeGpsProfile(desiredConfig.gps_profile);
+  const latestEventData = eventDataOf(latestEvent);
+  const appliedVersion = asNumber(
+    latestEventData.gps_config_version_applied ??
+      latestEventData.gpsConfigVersionApplied,
+  );
+  const appliedProfile = normalizeGpsProfile(
+    latestEventData.gps_profile_applied ?? latestEventData.gpsProfileApplied,
+  );
+
+  let state = GPS_CONFIG_STATE.unknown;
+
+  if (desiredVersion === null || !desiredProfile) {
+    state = GPS_CONFIG_STATE.unknown;
+  } else if (!latestEvent) {
+    state = GPS_CONFIG_STATE.saved;
+  } else {
+    const latestAt = Date.parse(latestEvent.created_at ?? "");
+    if (!Number.isFinite(latestAt)) {
+      state = GPS_CONFIG_STATE.unknown;
+    } else if (Date.now() - latestAt >= OFFLINE_THRESHOLD_MS) {
+      state = GPS_CONFIG_STATE.stale;
+    } else if (appliedVersion === desiredVersion) {
+      state = GPS_CONFIG_STATE.applied;
+    } else if (appliedVersion === null || appliedVersion < desiredVersion) {
+      state = GPS_CONFIG_STATE.pending;
+    } else {
+      state = GPS_CONFIG_STATE.unknown;
+    }
+  }
+
+  return {
+    desired_profile: desiredProfile,
+    desired_version: desiredVersion,
+    applied_profile: appliedProfile,
+    applied_version: appliedVersion,
+    state,
+  };
+}
+
 const farmService = {
   async getOverview(_req, res) {
     try {
-      const recentWindowStart = new Date(Date.now() - RECENT_BEHAVIOR_WINDOW_MS).toISOString();
+      const recentWindowStart = new Date(
+        Date.now() - RECENT_BEHAVIOR_WINDOW_MS,
+      ).toISOString();
 
       const [
         nodesResult,
+        gpsConfigResult,
         latestEventsResult,
         latestBehaviorResult,
         baseStatusResult,
         recentEventsResult,
       ] = await Promise.all([
         supabase
-          .from('nodes')
-          .select('id,name,tag_id,birth_date,breed,status,created_at')
-          .order('created_at', { ascending: true }),
+          .from("nodes")
+          .select("id,name,tag_id,birth_date,breed,status,created_at")
+          .order("created_at", { ascending: true }),
         supabase
-          .from('latest_node_events')
-          .select('id,node_id,base_id,event_type,event_data,created_at'),
+          .from("node_gps_config")
+          .select("node_id,gps_profile,gps_config_version,updated_at"),
         supabase
-          .from('latest_node_behavior')
+          .from("latest_node_events")
+          .select("id,node_id,base_id,event_type,event_data,created_at"),
+        supabase
+          .from("latest_node_behavior")
           .select(
-            'node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate',
+            "node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate",
           ),
         supabase
-          .from('base_status')
-          .select('base_id,status_type,status_data,created_at')
-          .order('created_at', { ascending: false })
+          .from("base_status")
+          .select("base_id,status_type,status_data,created_at")
+          .order("created_at", { ascending: false })
           .limit(1000),
         supabase
-          .from('node_events')
-          .select('node_id,event_data,created_at')
-          .gte('created_at', recentWindowStart)
-          .order('created_at', { ascending: false })
+          .from("node_events")
+          .select("node_id,event_data,created_at")
+          .gte("created_at", recentWindowStart)
+          .order("created_at", { ascending: false })
           .limit(RECENT_EVENTS_BULK_LIMIT),
       ]);
 
       if (nodesResult.error) throw nodesResult.error;
+      if (gpsConfigResult.error) throw gpsConfigResult.error;
       if (latestEventsResult.error) throw latestEventsResult.error;
       if (latestBehaviorResult.error) throw latestBehaviorResult.error;
       if (baseStatusResult.error) throw baseStatusResult.error;
       if (recentEventsResult.error) throw recentEventsResult.error;
 
+      const gpsConfigByNodeId = new Map(
+        (gpsConfigResult.data || []).map((row) => [row.node_id, row]),
+      );
       const latestByNodeId = new Map(
         (latestEventsResult.data || []).map((event) => [event.node_id, event]),
       );
       const behaviorByNodeId = new Map(
-        (latestBehaviorResult.data || []).map((row) => [row.node_id, normalizeBehavior(row)]),
+        (latestBehaviorResult.data || []).map((row) => [
+          row.node_id,
+          normalizeBehavior(row),
+        ]),
       );
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
 
       const nodes = (nodesResult.data || []).map((node) => {
-        const latestEvent = normalizeLegacyBasePowerPlaceholders(latestByNodeId.get(node.id) || null);
+        const latestEvent = normalizeLegacyBasePowerPlaceholders(
+          latestByNodeId.get(node.id) || null,
+        );
+        const desiredGpsConfig = gpsConfigByNodeId.get(node.id) || null;
+        const gpsConfigState = deriveGpsConfigState(
+          desiredGpsConfig,
+          latestEvent,
+        );
         const { last_lat, last_lng } = resolveLastPosition(latestEvent);
 
         return {
@@ -291,7 +401,11 @@ const farmService = {
           created_at: node.created_at,
           latest_event: latestEvent,
           behavior: behaviorByNodeId.get(node.id) || null,
-          derived_status: deriveNodeStatus(latestEvent, recentByNodeId.get(node.id) || []),
+          derived_status: deriveNodeStatus(
+            latestEvent,
+            recentByNodeId.get(node.id) || [],
+          ),
+          gps_config: gpsConfigState,
           last_lat,
           last_lng,
         };
@@ -302,8 +416,10 @@ const farmService = {
         bases: latestByBaseId(baseStatusResult.data),
       });
     } catch (err) {
-      console.error('[GET] Farm overview failed:', err.message);
-      res.status(500).json({ error: 'Failed to fetch farm overview', details: err.message });
+      console.error("[GET] Farm overview failed:", err.message);
+      res
+        .status(500)
+        .json({ error: "Failed to fetch farm overview", details: err.message });
     }
   },
 };
