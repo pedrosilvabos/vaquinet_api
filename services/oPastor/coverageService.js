@@ -6,9 +6,20 @@ export const COVERAGE_METRICS = Object.freeze({
   density: "density",
 });
 
+export const COVERAGE_WINDOWS = Object.freeze({
+  "1w": 7 * 24 * 60 * 60 * 1000,
+  "1m": 30 * 24 * 60 * 60 * 1000,
+  "6m": 180 * 24 * 60 * 60 * 1000,
+});
+
+export const COVERAGE_ANCHORS = Object.freeze({
+  latest: "latest",
+});
+
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 5000;
 const DEFAULT_RANGE_DAYS = 7;
+const LATEST_GPS_BATCH_SIZE = 500;
 
 function asNumber(value) {
   if (typeof value === "number") {
@@ -42,6 +53,20 @@ function isValidLatLng(latitude, longitude) {
 function parseMetric(value) {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return Object.values(COVERAGE_METRICS).includes(normalized)
+    ? normalized
+    : null;
+}
+
+function parseWindow(value) {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return Object.prototype.hasOwnProperty.call(COVERAGE_WINDOWS, normalized)
+    ? normalized
+    : null;
+}
+
+function parseAnchor(value) {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return Object.values(COVERAGE_ANCHORS).includes(normalized)
     ? normalized
     : null;
 }
@@ -87,6 +112,68 @@ function resolveDateRange(fromRaw, toRaw, now = new Date()) {
   };
 }
 
+export function resolveCoverageQuery(query, now = new Date()) {
+  const hasExplicitFrom = query?.from != null && query.from !== "";
+  const hasExplicitTo = query?.to != null && query.to !== "";
+  const hasWindow = query?.window != null && query.window !== "";
+  const hasAnchor = query?.anchor != null && query.anchor !== "";
+
+  if ((hasExplicitFrom || hasExplicitTo) && (hasWindow || hasAnchor)) {
+    return { error: "conflicting_range_parameters" };
+  }
+
+  if (hasExplicitFrom || hasExplicitTo) {
+    const range = resolveDateRange(query?.from, query?.to, now);
+    if ("error" in range) {
+      return range;
+    }
+    return {
+      mode: "explicit",
+      from: range.from,
+      to: range.to,
+      window: null,
+      anchor: null,
+    };
+  }
+
+  if (hasWindow || hasAnchor) {
+    const window = parseWindow(query?.window);
+    const anchor = parseAnchor(query?.anchor);
+
+    if (!window) {
+      return {
+        error: "invalid_window",
+        supported_windows: Object.keys(COVERAGE_WINDOWS),
+      };
+    }
+    if (!anchor) {
+      return {
+        error: "invalid_anchor",
+        supported_anchors: Object.values(COVERAGE_ANCHORS),
+      };
+    }
+
+    return {
+      mode: "latest-window",
+      window,
+      anchor,
+    };
+  }
+
+  const range = resolveDateRange(query?.from, query?.to, now);
+  if ("error" in range) {
+    return range;
+  }
+
+  return {
+    mode: "default",
+    from: range.from,
+    to: range.to,
+    window: null,
+    anchor: null,
+  };
+}
+
 export function mapCoveragePoint(event) {
   const eventData = eventDataOf(event);
   const latitude = asNumber(
@@ -115,17 +202,95 @@ export function mapCoveragePoint(event) {
   };
 }
 
-export function filterCoveragePoints(points, metric) {
-  if (metric === COVERAGE_METRICS.density) {
-    return points;
-  }
-  if (metric === COVERAGE_METRICS.rssi) {
-    return points.filter((point) => point.rssi !== null);
-  }
-  if (metric === COVERAGE_METRICS.snr) {
-    return points.filter((point) => point.snr !== null);
-  }
+export function filterCoveragePoints(points) {
   return points;
+}
+
+async function findLatestValidGpsObservation(supabase, animalId) {
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("node_events")
+      .select("node_id,event_data,created_at")
+      .eq("node_id", animalId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + LATEST_GPS_BATCH_SIZE - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    for (const event of data) {
+      const point = mapCoveragePoint(event);
+      if (point) {
+        return {
+          event,
+          point,
+          timestamp: new Date(String(event.created_at)),
+        };
+      }
+    }
+
+    if (data.length < LATEST_GPS_BATCH_SIZE) {
+      return null;
+    }
+
+    offset += LATEST_GPS_BATCH_SIZE;
+  }
+}
+
+async function fetchCoverageEvents(
+  supabase,
+  animalId,
+  range,
+  limit,
+  { endExclusive = false } = {},
+) {
+  let query = supabase
+    .from("node_events")
+    .select("node_id,event_data,created_at")
+    .eq("node_id", animalId)
+    .gte("created_at", range.from.toISOString());
+
+  query = endExclusive
+    ? query.lt("created_at", range.to.toISOString())
+    : query.lte("created_at", range.to.toISOString());
+
+  const { data, error } = await query
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+function buildCoverageResponse({
+  animalId,
+  metric,
+  range,
+  points,
+  window = null,
+  anchor = null,
+  latestObservationAt = null,
+}) {
+  return {
+    animalId,
+    metric,
+    from: range?.from?.toISOString() ?? null,
+    to: range?.to?.toISOString() ?? null,
+    window,
+    anchor,
+    latestObservationAt,
+    points,
+  };
 }
 
 export function makeCoverageService({ supabase = defaultSupabase } = {}) {
@@ -152,9 +317,16 @@ export function makeCoverageService({ supabase = defaultSupabase } = {}) {
         });
       }
 
-      const range = resolveDateRange(req.query?.from, req.query?.to, new Date());
-      if ("error" in range) {
-        return res.status(400).json({ error: range.error });
+      const queryResolution = resolveCoverageQuery(req.query ?? {}, new Date());
+      if ("error" in queryResolution) {
+        const body = { error: queryResolution.error };
+        if (queryResolution.supported_windows) {
+          body.supported_windows = queryResolution.supported_windows;
+        }
+        if (queryResolution.supported_anchors) {
+          body.supported_anchors = queryResolution.supported_anchors;
+        }
+        return res.status(400).json(body);
       }
 
       try {
@@ -171,31 +343,64 @@ export function makeCoverageService({ supabase = defaultSupabase } = {}) {
           return res.status(404).json({ error: "animal_not_found" });
         }
 
-        const { data, error } = await supabase
-          .from("node_events")
-          .select("node_id,event_data,created_at")
-          .eq("node_id", animalId)
-          .gte("created_at", range.from.toISOString())
-          .lte("created_at", range.to.toISOString())
-          .order("created_at", { ascending: true })
-          .limit(limit);
+        const latestObservation = await findLatestValidGpsObservation(
+          supabase,
+          animalId,
+        );
+        let range = queryResolution.mode === "latest-window" ? null : {
+          from: queryResolution.from,
+          to: queryResolution.to,
+        };
+        let latestObservationAt =
+          latestObservation?.timestamp?.toISOString() ?? null;
 
-        if (error) {
-          throw error;
+        if (queryResolution.mode === "latest-window") {
+          if (!latestObservation) {
+            return res.status(200).json(
+              buildCoverageResponse({
+                animalId,
+                metric,
+                range: null,
+                points: [],
+                window: queryResolution.window,
+                anchor: queryResolution.anchor,
+                latestObservationAt: null,
+              }),
+            );
+          }
+
+          range = {
+            from: new Date(
+              latestObservation.timestamp.getTime() -
+                COVERAGE_WINDOWS[queryResolution.window],
+            ),
+            to: latestObservation.timestamp,
+          };
         }
 
-        const mappedPoints = (data ?? [])
+        const data = await fetchCoverageEvents(
+          supabase,
+          animalId,
+          range,
+          limit,
+          { endExclusive: queryResolution.mode === "explicit" },
+        );
+        const mappedPoints = data
           .map((event) => mapCoveragePoint(event))
           .filter((point) => point !== null);
-        const points = filterCoveragePoints(mappedPoints, metric);
+        const points = filterCoveragePoints(mappedPoints);
 
-        return res.status(200).json({
-          animalId,
-          metric,
-          from: range.from.toISOString(),
-          to: range.to.toISOString(),
-          points,
-        });
+        return res.status(200).json(
+          buildCoverageResponse({
+            animalId,
+            metric,
+            range,
+            points,
+            window: queryResolution.window,
+            anchor: queryResolution.anchor,
+            latestObservationAt,
+          }),
+        );
       } catch (error) {
         return res.status(500).json({
           error: "failed_to_load_coverage",
