@@ -1,6 +1,7 @@
 import express from "express";
 import nodeService from "../../services/oPastor/nodeService.js";
 import behaviorObservationService from "../../services/oPastor/behaviorObservationService.js";
+import coverageService from "../../services/oPastor/coverageService.js";
 import gpsConfigService from "../../services/oPastor/gpsConfigService.js";
 import { batchTelemetry } from "../../services/oPastor/telemetryService.js";
 import { requireBearerToken } from "../../middleware/auth.js";
@@ -18,6 +19,7 @@ router.get("/latest/:id", nodeService.getLatestNodeEventById);
 router.get("/", nodeService.getAllNodes);
 router.get("/:id/events", nodeService.getNodeEventsById);
 router.get("/:id/gps-config", gpsConfigService.getNodeGpsConfig);
+router.get("/:id/coverage", coverageService.getNodeCoverage);
 router.put(
   "/:id/gps-config",
   requireBearerToken,
