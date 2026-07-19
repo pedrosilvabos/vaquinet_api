@@ -26,10 +26,15 @@ function createMockResponse() {
   };
 }
 
+function compareIsoDate(a, b) {
+  return new Date(String(a)).getTime() - new Date(String(b)).getTime();
+}
+
 function createSupabaseMock({
   node = { id: "cow_001" },
   ascendingEvents = [],
   descendingPages = [],
+  events = null,
   nodeError = null,
   eventsError = null,
 } = {}) {
@@ -53,34 +58,137 @@ function createSupabaseMock({
         return {
           _ascending: true,
           _rangeStart: 0,
+          _rangeEnd: null,
+          _limit: null,
+          _filters: {},
           select() {
             return this;
           },
-          eq() {
+          eq(column, value) {
+            this._filters[column] = value;
             return this;
           },
-          gte() {
+          gte(column, value) {
+            this._filters[`gte:${column}`] = value;
             return this;
           },
-          lt() {
+          lt(column, value) {
+            this._filters[`lt:${column}`] = value;
             return this;
           },
-          lte() {
+          lte(column, value) {
+            this._filters[`lte:${column}`] = value;
             return this;
           },
           order(_column, options = {}) {
             this._ascending = options.ascending !== false;
             return this;
           },
-          range(start) {
+          range(start, end) {
             this._rangeStart = start;
+            this._rangeEnd = end;
+            if (Array.isArray(events)) {
+              const filtered = events
+                .filter((event) => {
+                  if (
+                    this._filters.node_id != null &&
+                    event.node_id !== this._filters.node_id
+                  ) {
+                    return false;
+                  }
+
+                  const createdAt = String(event.created_at);
+                  if (
+                    this._filters["gte:created_at"] != null &&
+                    compareIsoDate(createdAt, this._filters["gte:created_at"]) <
+                      0
+                  ) {
+                    return false;
+                  }
+                  if (
+                    this._filters["lte:created_at"] != null &&
+                    compareIsoDate(createdAt, this._filters["lte:created_at"]) >
+                      0
+                  ) {
+                    return false;
+                  }
+                  if (
+                    this._filters["lt:created_at"] != null &&
+                    compareIsoDate(createdAt, this._filters["lt:created_at"]) >=
+                      0
+                  ) {
+                    return false;
+                  }
+
+                  return true;
+                })
+                .sort((a, b) =>
+                  this._ascending
+                    ? compareIsoDate(a.created_at, b.created_at)
+                    : compareIsoDate(b.created_at, a.created_at),
+                );
+
+              return Promise.resolve({
+                data: filtered.slice(start, end + 1),
+                error: eventsError,
+              });
+            }
+
             const pageIndex = Math.floor(start / 500);
             return Promise.resolve({
               data: descendingPages[pageIndex] ?? [],
               error: eventsError,
             });
           },
-          async limit() {
+          async limit(limitValue) {
+            this._limit = limitValue;
+            if (Array.isArray(events)) {
+              const filtered = events
+                .filter((event) => {
+                  if (
+                    this._filters.node_id != null &&
+                    event.node_id !== this._filters.node_id
+                  ) {
+                    return false;
+                  }
+
+                  const createdAt = String(event.created_at);
+                  if (
+                    this._filters["gte:created_at"] != null &&
+                    compareIsoDate(createdAt, this._filters["gte:created_at"]) <
+                      0
+                  ) {
+                    return false;
+                  }
+                  if (
+                    this._filters["lte:created_at"] != null &&
+                    compareIsoDate(createdAt, this._filters["lte:created_at"]) >
+                      0
+                  ) {
+                    return false;
+                  }
+                  if (
+                    this._filters["lt:created_at"] != null &&
+                    compareIsoDate(createdAt, this._filters["lt:created_at"]) >=
+                      0
+                  ) {
+                    return false;
+                  }
+
+                  return true;
+                })
+                .sort((a, b) =>
+                  this._ascending
+                    ? compareIsoDate(a.created_at, b.created_at)
+                    : compareIsoDate(b.created_at, a.created_at),
+                );
+
+              return {
+                data: filtered.slice(0, limitValue),
+                error: eventsError,
+              };
+            }
+
             return { data: ascendingEvents, error: eventsError };
           },
         };
@@ -190,32 +298,40 @@ test("getNodeCoverage validates metric and date range", async () => {
 test("getNodeCoverage anchors preset windows to the latest valid GPS observation", async () => {
   const service = makeCoverageService({
     supabase: createSupabaseMock({
-      descendingPages: [
+      events: [
         [
           {
             node_id: "cow_001",
             created_at: "2026-07-19T15:37:00Z",
-            event_data: { latitude: 0, longitude: 0, lora_rssi: "-90", lora_snr: "8" },
+            event_data: {
+              latitude: 0,
+              longitude: 0,
+              lora_rssi: "-90",
+              lora_snr: "8",
+            },
           },
           {
             node_id: "cow_001",
             created_at: "2026-07-19T15:35:00Z",
-            event_data: { latitude: "38.12345", longitude: "-27.12345", lora_rssi: "-103", lora_snr: "4.5" },
+            event_data: {
+              latitude: "38.12345",
+              longitude: "-27.12345",
+              lora_rssi: "-103",
+              lora_snr: "4.5",
+            },
           },
-        ],
-      ],
-      ascendingEvents: [
-        {
-          node_id: "cow_001",
-          created_at: "2026-07-19T14:40:00Z",
-          event_data: { latitude: "38.12344", longitude: "-27.12344", lora_rssi: "-101", lora_snr: "5.0" },
-        },
-        {
-          node_id: "cow_001",
-          created_at: "2026-07-19T15:35:00Z",
-          event_data: { latitude: "38.12345", longitude: "-27.12345", lora_rssi: "-103", lora_snr: "4.5" },
-        },
-      ],
+          {
+            node_id: "cow_001",
+            created_at: "2026-07-19T14:40:00Z",
+            event_data: {
+              latitude: "38.12344",
+              longitude: "-27.12344",
+              lora_rssi: "-101",
+              lora_snr: "5.0",
+            },
+          },
+        ].flat(),
+      ].flat(),
     }),
   });
 
@@ -239,6 +355,114 @@ test("getNodeCoverage anchors preset windows to the latest valid GPS observation
   assert.equal(response.body.from, "2026-07-12T15:35:00.000Z");
   assert.equal(response.body.to, "2026-07-19T15:35:00.000Z");
   assert.equal(response.body.points.length, 2);
+});
+
+test("getNodeCoverage uses UTC calendar month windows for preset ranges", async () => {
+  const service = makeCoverageService({
+    supabase: createSupabaseMock({
+      descendingPages: [
+        [
+          {
+            node_id: "cow_001",
+            created_at: "2026-07-31T15:35:00Z",
+            event_data: {
+              latitude: "38.12345",
+              longitude: "-27.12345",
+              lora_rssi: "-103",
+              lora_snr: "4.5",
+            },
+          },
+        ],
+      ],
+      ascendingEvents: [
+        {
+          node_id: "cow_001",
+          created_at: "2026-07-31T15:35:00Z",
+          event_data: {
+            latitude: "38.12345",
+            longitude: "-27.12345",
+            lora_rssi: "-103",
+            lora_snr: "4.5",
+          },
+        },
+      ],
+    }),
+  });
+
+  const response = createMockResponse();
+  await service.getNodeCoverage(
+    {
+      params: { id: "cow_001" },
+      query: {
+        metric: "rssi",
+        window: "1m",
+        anchor: "latest",
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.from, "2026-06-30T15:35:00.000Z");
+  assert.equal(response.body.to, "2026-07-31T15:35:00.000Z");
+});
+
+test("getNodeCoverage paginates raw events until it collects valid latest points", async () => {
+  const olderInvalidEvents = Array.from({ length: 1000 }, (_, index) => ({
+    node_id: "cow_001",
+    created_at: `2026-06-${String((index % 28) + 1).padStart(2, "0")}T00:${String(index % 60).padStart(2, "0")}:00Z`,
+    event_data: { latitude: 0, longitude: 0, lora_rssi: "-110", lora_snr: "1" },
+  }));
+  const recentValidEvents = [
+    {
+      node_id: "cow_001",
+      created_at: "2026-07-02T10:15:00Z",
+      event_data: {
+        latitude: "38.12340",
+        longitude: "-27.12340",
+        lora_rssi: "-100",
+        lora_snr: "4.0",
+      },
+    },
+    {
+      node_id: "cow_001",
+      created_at: "2026-07-08T15:35:00Z",
+      event_data: {
+        latitude: "38.12345",
+        longitude: "-27.12345",
+        lora_rssi: "-103",
+        lora_snr: "4.5",
+      },
+    },
+  ];
+
+  const service = makeCoverageService({
+    supabase: createSupabaseMock({
+      events: [...olderInvalidEvents, ...recentValidEvents],
+    }),
+  });
+
+  const response = createMockResponse();
+  await service.getNodeCoverage(
+    {
+      params: { id: "cow_001" },
+      query: {
+        metric: "rssi",
+        window: "1m",
+        anchor: "latest",
+        limit: "2000",
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.latestObservationAt, "2026-07-08T15:35:00.000Z");
+  assert.equal(response.body.points.length, 2);
+  assert.deepEqual(
+    response.body.points.map((point) => point.timestamp),
+    ["2026-07-02T10:15:00Z", "2026-07-08T15:35:00Z"],
+  );
 });
 
 test("getNodeCoverage returns empty preset results only when no valid GPS observation exists", async () => {
@@ -277,7 +501,7 @@ test("getNodeCoverage returns empty preset results only when no valid GPS observ
 test("getNodeCoverage returns chronological points and preserves explicit from/to", async () => {
   const service = makeCoverageService({
     supabase: createSupabaseMock({
-      ascendingEvents: [
+      events: [
         {
           node_id: "cow_001",
           created_at: "2026-07-19T10:15:00Z",
@@ -315,7 +539,7 @@ test("getNodeCoverage returns chronological points and preserves explicit from/t
   assert.equal(response.body.metric, "rssi");
   assert.equal(response.body.from, "2026-07-19T00:00:00.000Z");
   assert.equal(response.body.to, "2026-07-19T23:59:59.000Z");
-  assert.equal(response.body.latestObservationAt, null);
+  assert.equal(response.body.latestObservationAt, "2026-07-19T10:17:00.000Z");
   assert.equal(response.body.points.length, 2);
   assert.deepEqual(response.body.points[0], {
     latitude: 38.12345,
@@ -336,16 +560,18 @@ test("getNodeCoverage returns chronological points and preserves explicit from/t
 test("getNodeCoverage keeps latestObservationAt for explicit empty custom ranges", async () => {
   const service = makeCoverageService({
     supabase: createSupabaseMock({
-      descendingPages: [
-        [
-          {
-            node_id: "cow_001",
-            created_at: "2026-07-08T15:37:00Z",
-            event_data: { latitude: "38.12345", longitude: "-27.12345", lora_rssi: "-103", lora_snr: "4.5" },
+      events: [
+        {
+          node_id: "cow_001",
+          created_at: "2026-07-10T15:37:00Z",
+          event_data: {
+            latitude: "38.12345",
+            longitude: "-27.12345",
+            lora_rssi: "-103",
+            lora_snr: "4.5",
           },
-        ],
+        },
       ],
-      ascendingEvents: [],
     }),
   });
 
@@ -363,7 +589,7 @@ test("getNodeCoverage keeps latestObservationAt for explicit empty custom ranges
   );
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.body.latestObservationAt, "2026-07-08T15:37:00.000Z");
+  assert.equal(response.body.latestObservationAt, "2026-07-10T15:37:00.000Z");
   assert.deepEqual(response.body.points, []);
 });
 

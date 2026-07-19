@@ -7,9 +7,9 @@ export const COVERAGE_METRICS = Object.freeze({
 });
 
 export const COVERAGE_WINDOWS = Object.freeze({
-  "1w": 7 * 24 * 60 * 60 * 1000,
-  "1m": 30 * 24 * 60 * 60 * 1000,
-  "6m": 180 * 24 * 60 * 60 * 1000,
+  "1w": "1w",
+  "1m": "1m",
+  "6m": "6m",
 });
 
 export const COVERAGE_ANCHORS = Object.freeze({
@@ -20,6 +20,7 @@ const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 5000;
 const DEFAULT_RANGE_DAYS = 7;
 const LATEST_GPS_BATCH_SIZE = 500;
+const COVERAGE_FETCH_BATCH_SIZE = 1000;
 
 function asNumber(value) {
   if (typeof value === "number") {
@@ -206,6 +207,46 @@ export function filterCoveragePoints(points) {
   return points;
 }
 
+function subtractUtcCalendarMonths(date, months) {
+  const to = new Date(date);
+  const from = new Date(to);
+  const originalDay = from.getUTCDate();
+
+  from.setUTCDate(1);
+  from.setUTCMonth(from.getUTCMonth() - months);
+
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  from.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
+
+  return from;
+}
+
+function resolveLatestWindowRange(latestObservationAt, window) {
+  const to = new Date(latestObservationAt);
+
+  switch (window) {
+    case "1w":
+      return {
+        from: new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000),
+        to,
+      };
+    case "1m":
+      return {
+        from: subtractUtcCalendarMonths(to, 1),
+        to,
+      };
+    case "6m":
+      return {
+        from: subtractUtcCalendarMonths(to, 6),
+        to,
+      };
+    default:
+      throw new Error(`Unsupported coverage window: ${window}`);
+  }
+}
+
 async function findLatestValidGpsObservation(supabase, animalId) {
   let offset = 0;
 
@@ -244,32 +285,55 @@ async function findLatestValidGpsObservation(supabase, animalId) {
   }
 }
 
-async function fetchCoverageEvents(
+async function fetchCoveragePoints(
   supabase,
   animalId,
   range,
   limit,
   { endExclusive = false } = {},
 ) {
-  let query = supabase
-    .from("node_events")
-    .select("node_id,event_data,created_at")
-    .eq("node_id", animalId)
-    .gte("created_at", range.from.toISOString());
+  const collectedPoints = [];
+  let offset = 0;
 
-  query = endExclusive
-    ? query.lt("created_at", range.to.toISOString())
-    : query.lte("created_at", range.to.toISOString());
+  while (collectedPoints.length < limit) {
+    let query = supabase
+      .from("node_events")
+      .select("node_id,event_data,created_at")
+      .eq("node_id", animalId)
+      .gte("created_at", range.from.toISOString());
 
-  const { data, error } = await query
-    .order("created_at", { ascending: true })
-    .limit(limit);
+    query = endExclusive
+      ? query.lt("created_at", range.to.toISOString())
+      : query.lte("created_at", range.to.toISOString());
 
-  if (error) {
-    throw error;
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .range(offset, offset + COVERAGE_FETCH_BATCH_SIZE - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const events = data ?? [];
+    for (const event of events) {
+      const point = mapCoveragePoint(event);
+      if (!point) {
+        continue;
+      }
+      collectedPoints.push(point);
+      if (collectedPoints.length >= limit) {
+        break;
+      }
+    }
+
+    if (events.length < COVERAGE_FETCH_BATCH_SIZE) {
+      break;
+    }
+
+    offset += COVERAGE_FETCH_BATCH_SIZE;
   }
 
-  return data ?? [];
+  return filterCoveragePoints(collectedPoints.reverse());
 }
 
 function buildCoverageResponse({
@@ -369,26 +433,19 @@ export function makeCoverageService({ supabase = defaultSupabase } = {}) {
             );
           }
 
-          range = {
-            from: new Date(
-              latestObservation.timestamp.getTime() -
-                COVERAGE_WINDOWS[queryResolution.window],
-            ),
-            to: latestObservation.timestamp,
-          };
+          range = resolveLatestWindowRange(
+            latestObservation.timestamp,
+            queryResolution.window,
+          );
         }
 
-        const data = await fetchCoverageEvents(
+        const points = await fetchCoveragePoints(
           supabase,
           animalId,
           range,
           limit,
           { endExclusive: queryResolution.mode === "explicit" },
         );
-        const mappedPoints = data
-          .map((event) => mapCoveragePoint(event))
-          .filter((point) => point !== null);
-        const points = filterCoveragePoints(mappedPoints);
 
         return res.status(200).json(
           buildCoverageResponse({
