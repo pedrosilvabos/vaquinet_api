@@ -607,3 +607,82 @@ test("getNodeCoverage returns 404 when animal does not exist", async () => {
   assert.equal(response.statusCode, 404);
   assert.equal(response.body.error, "animal_not_found");
 });
+
+test("getLatestNodeLocation returns the newest valid GPS observation", async () => {
+  const service = makeCoverageService({
+    supabase: createSupabaseMock({
+      events: [
+        {
+          node_id: "cow_001",
+          created_at: "2026-07-19T10:15:00Z",
+          event_data: { latitude: "38.12345", longitude: "-27.12345", lora_rssi: "-103", lora_snr: "4.5" },
+        },
+        {
+          node_id: "cow_001",
+          created_at: "2026-07-19T10:16:00Z",
+          event_data: { latitude: 0, longitude: 0, lora_rssi: "-104", lora_snr: "4.0" },
+        },
+        {
+          node_id: "cow_001",
+          created_at: "2026-07-19T10:17:00Z",
+          event_data: {
+            latitude: "38.12346",
+            longitude: "-27.12346",
+            lora_rssi: "-100",
+            lora_snr: "5.0",
+            sat_count: 5,
+            node_gps_speed: "2.5",
+            node_gps_course: "90",
+            node_gps_altitude: "55.1",
+            node_battery_voltage: "3.95",
+          },
+        },
+      ],
+    }),
+  });
+
+  const response = createMockResponse();
+  await service.getLatestNodeLocation(
+    { params: { id: "cow_001" }, query: {} },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.latestObservationAt, "2026-07-19T10:17:00.000Z");
+  assert.deepEqual(response.body.location, {
+    latitude: 38.12346,
+    longitude: -27.12346,
+    timestamp: "2026-07-19T10:17:00Z",
+    rssi: -100,
+    snr: 5,
+    sat_count: 5,
+    speed: 2.5,
+    course: 90,
+    altitude: 55.1,
+    battery_voltage: 3.95,
+  });
+});
+
+test("getLatestNodeLocation returns null location when no valid GPS exists", async () => {
+  const service = makeCoverageService({
+    supabase: createSupabaseMock({
+      events: [
+        {
+          node_id: "cow_001",
+          created_at: "2026-07-19T10:15:00Z",
+          event_data: { latitude: 0, longitude: 0, lora_rssi: "-103", lora_snr: "4.5" },
+        },
+      ],
+    }),
+  });
+
+  const response = createMockResponse();
+  await service.getLatestNodeLocation(
+    { params: { id: "cow_001" }, query: {} },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.latestObservationAt, null);
+  assert.equal(response.body.location, null);
+});

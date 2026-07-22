@@ -203,6 +203,31 @@ export function mapCoveragePoint(event) {
   };
 }
 
+function latestLocationDetailsOf(event) {
+  const point = mapCoveragePoint(event);
+  if (!point) {
+    return null;
+  }
+
+  const eventData = eventDataOf(event);
+  return {
+    latitude: point.latitude,
+    longitude: point.longitude,
+    timestamp: point.timestamp,
+    rssi: point.rssi,
+    snr: point.snr,
+    sat_count: asNumber(eventData.sat_count),
+    speed: asNumber(eventData.node_gps_speed ?? eventData.gps_speed),
+    course: asNumber(eventData.node_gps_course ?? eventData.gps_course),
+    altitude: asNumber(eventData.node_gps_altitude ?? eventData.gps_altitude),
+    battery_voltage: asNumber(
+      eventData.node_battery_voltage ??
+        eventData.node_battery ??
+        eventData.batteryVoltage,
+    ),
+  };
+}
+
 export function filterCoveragePoints(points) {
   return points;
 }
@@ -285,6 +310,20 @@ async function findLatestValidGpsObservation(supabase, animalId) {
   }
 }
 
+export async function findLatestValidGpsObservationDetails(supabase, animalId) {
+  const latestObservation = await findLatestValidGpsObservation(supabase, animalId);
+  if (!latestObservation) {
+    return null;
+  }
+
+  return {
+    event: latestObservation.event,
+    point: latestObservation.point,
+    timestamp: latestObservation.timestamp,
+    location: latestLocationDetailsOf(latestObservation.event),
+  };
+}
+
 async function fetchCoveragePoints(
   supabase,
   animalId,
@@ -359,6 +398,45 @@ function buildCoverageResponse({
 
 export function makeCoverageService({ supabase = defaultSupabase } = {}) {
   return {
+    async getLatestNodeLocation(req, res) {
+      const animalId = req.params?.id?.trim();
+      if (!animalId) {
+        return res.status(400).json({ error: "missing_animal_id" });
+      }
+
+      try {
+        const { data: node, error: nodeError } = await supabase
+          .from("nodes")
+          .select("id")
+          .eq("id", animalId)
+          .maybeSingle();
+
+        if (nodeError) {
+          throw nodeError;
+        }
+        if (!node) {
+          return res.status(404).json({ error: "animal_not_found" });
+        }
+
+        const latestObservation = await findLatestValidGpsObservationDetails(
+          supabase,
+          animalId,
+        );
+
+        return res.status(200).json({
+          animalId,
+          latestObservationAt:
+            latestObservation?.timestamp?.toISOString() ?? null,
+          location: latestObservation?.location ?? null,
+        });
+      } catch (error) {
+        return res.status(500).json({
+          error: "failed_to_load_latest_location",
+          details: error?.message ?? String(error),
+        });
+      }
+    },
+
     async getNodeCoverage(req, res) {
       const animalId = req.params?.id?.trim();
       if (!animalId) {

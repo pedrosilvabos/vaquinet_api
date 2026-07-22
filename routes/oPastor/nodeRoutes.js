@@ -17,7 +17,9 @@ const router = express.Router();
 
 router.get("/latest/:id", nodeService.getLatestNodeEventById);
 router.get("/", nodeService.getAllNodes);
+router.get("/inactive", nodeService.getInactiveNodes);
 router.get("/:id/events", nodeService.getNodeEventsById);
+router.get("/:id/location/latest", coverageService.getLatestNodeLocation);
 router.get("/:id/gps-config", gpsConfigService.getNodeGpsConfig);
 router.get("/:id/coverage", coverageService.getNodeCoverage);
 router.put(
@@ -28,6 +30,7 @@ router.put(
 router.get("/:id/activity", nodeService.getNodeActivityById);
 router.get("/:id/movement-timeline", nodeService.getNodeMovementTimelineById);
 router.get("/:id/battery-timeline", nodeService.getNodeBatteryTimelineById);
+router.get("/:id/anomaly-evidence", nodeService.getNodeAnomalyEvidenceById);
 router.get(
   "/:id/behavior-observations",
   behaviorObservationService.listObservations,

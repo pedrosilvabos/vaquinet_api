@@ -11,6 +11,12 @@ import {
   SUPPORTED_BATTERY_TIMELINE_RANGES,
   timelineWindow as batteryTimelineWindow,
 } from './batteryTimelineService.js';
+import {
+  buildCompareWindowSummary,
+  classifyInactiveWindow as classifyInactiveBehaviorWindow,
+  isFreshTimestamp as isFreshTelemetryTimestamp,
+  parseBoundedInteger as parseBoundedIntegerValue,
+} from './inactivityEvidenceUtils.js';
 
 export async function publishNodeList() {
   const { data, error } = await supabase.from('nodes').select('*');
@@ -27,6 +33,19 @@ export async function publishNodeList() {
 const LOW_BATTERY_VOLTAGE = 3.6;
 const DEFAULT_ACTIVITY_LIMIT = 20;
 const MAX_ACTIVITY_LIMIT = 100;
+const OFFLINE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_INACTIVITY_WINDOW_MINUTES = 60;
+const MIN_INACTIVITY_WINDOW_MINUTES = 15;
+const MAX_INACTIVITY_WINDOW_MINUTES = 24 * 60;
+const MIN_INACTIVITY_OBSERVATIONS = 3;
+const DEFAULT_EXPECTED_CADENCE_MINUTES = 8;
+const MAX_RECENT_BEHAVIOR_ROWS = 10000;
+const DEFAULT_EVIDENCE_COMPARISON_MINUTES = 60;
+const MIN_EVIDENCE_COMPARISON_MINUTES = 15;
+const MAX_EVIDENCE_COMPARISON_MINUTES = 12 * 60;
+const DEFAULT_EVIDENCE_BASELINE_HOURS = 24;
+const MIN_EVIDENCE_BASELINE_HOURS = 6;
+const MAX_EVIDENCE_BASELINE_HOURS = 24 * 7;
 
 function eventDataOf(event) {
   return event?.event_data && typeof event.event_data === 'object' ? event.event_data : {};
@@ -113,6 +132,283 @@ function deriveActivityItems(event, options = {}) {
   }
 
   return items;
+}
+
+function parseBoundedInteger(value, { min, max, defaultValue }) {
+  if (value == null || value === '') {
+    return { ok: true, value: defaultValue };
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    return {
+      ok: false,
+      error: 'invalid_integer',
+      min,
+      max,
+    };
+  }
+
+  return { ok: true, value: parsed };
+}
+
+function parseIsoDate(value) {
+  const parsed = new Date(String(value ?? ''));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isFreshTimestamp(date, now = new Date()) {
+  return now.getTime() - date.getTime() < OFFLINE_THRESHOLD_MS;
+}
+
+function eventTimestampOf(event) {
+  return parseIsoDate(event?.created_at);
+}
+
+function batteryVoltageOfEvent(event) {
+  const data = eventDataOf(event);
+  return asNumber(
+    data.node_battery_voltage ?? data.node_battery ?? data.batteryVoltage,
+  );
+}
+
+function compareNumbersAscending(a, b) {
+  return a - b;
+}
+
+function median(numbers) {
+  if (!Array.isArray(numbers) || numbers.length === 0) return null;
+  const sorted = [...numbers].sort(compareNumbersAscending);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[middle];
+  }
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function average(numbers) {
+  if (!Array.isArray(numbers) || numbers.length === 0) return null;
+  const sum = numbers.reduce((acc, value) => acc + value, 0);
+  return sum / numbers.length;
+}
+
+function roundTo(value, digits = 3) {
+  if (!Number.isFinite(value)) return null;
+  return Number(value.toFixed(digits));
+}
+
+function groupRowsByNodeId(rows) {
+  const grouped = new Map();
+  for (const row of rows ?? []) {
+    if (!row?.node_id) continue;
+    const items = grouped.get(row.node_id) || [];
+    items.push(row);
+    grouped.set(row.node_id, items);
+  }
+  return grouped;
+}
+
+function motionModeOfBehaviorRow(row) {
+  return typeof row?.movement_mode === 'string' ? row.movement_mode : null;
+}
+
+function scoreAvgOfBehaviorRow(row) {
+  return asNumber(row?.score_avg);
+}
+
+function intervalMinutesBetween(from, to) {
+  return (to.getTime() - from.getTime()) / 60000;
+}
+
+function timelineGapsMinutes(rows) {
+  const gaps = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    const previousAt = parseIsoDate(rows[index - 1]?.created_at);
+    const currentAt = parseIsoDate(rows[index]?.created_at);
+    if (!previousAt || !currentAt) continue;
+    gaps.push(intervalMinutesBetween(previousAt, currentAt));
+  }
+  return gaps;
+}
+
+function summarizeBehaviorCoverage(rows, windowStart, windowEnd) {
+  const validRows = (rows ?? [])
+    .map((row) => ({ row, at: parseIsoDate(row?.created_at) }))
+    .filter((item) => item.at)
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  if (validRows.length === 0) {
+    return {
+      observation_count: 0,
+      first_observation_at: null,
+      latest_observation_at: null,
+      expected_cadence_minutes: DEFAULT_EXPECTED_CADENCE_MINUTES,
+      max_gap_minutes: null,
+      largest_gap_minutes: null,
+      coverage_ratio: 0,
+      has_start_coverage: false,
+      has_end_coverage: false,
+      has_internal_gap: false,
+      data_continuous: false,
+      quiet_observation_count: 0,
+      quiet_proportion: null,
+      active_observation_count: 0,
+      stationary_duration_minutes: null,
+      avg_score: null,
+    };
+  }
+
+  const firstAt = validRows[0].at;
+  const latestAt = validRows[validRows.length - 1].at;
+  const gaps = timelineGapsMinutes(validRows.map((item) => item.row));
+  const expectedCadenceMinutes =
+    median(gaps.filter((gap) => Number.isFinite(gap) && gap > 0)) ??
+    DEFAULT_EXPECTED_CADENCE_MINUTES;
+  const maxGapMinutes = Math.max(expectedCadenceMinutes * 2.5, 15);
+  const windowMinutes = Math.max(1, intervalMinutesBetween(windowStart, windowEnd));
+  const observedSpanMinutes = Math.max(0, intervalMinutesBetween(firstAt, latestAt));
+  const coverageRatio = Math.min(1, observedSpanMinutes / windowMinutes);
+  const hasStartCoverage =
+    intervalMinutesBetween(windowStart, firstAt) <= maxGapMinutes;
+  const hasEndCoverage =
+    intervalMinutesBetween(latestAt, windowEnd) <= maxGapMinutes;
+  const largestGapMinutes = gaps.length > 0 ? Math.max(...gaps) : null;
+  const hasInternalGap =
+    largestGapMinutes !== null && largestGapMinutes > maxGapMinutes;
+
+  const quietObservationCount = validRows.filter(
+    ({ row }) => motionModeOfBehaviorRow(row) === 'quiet',
+  ).length;
+  const activeObservationCount = validRows.length - quietObservationCount;
+  const quietProportion = quietObservationCount / validRows.length;
+  const allQuiet = quietObservationCount === validRows.length;
+  const dataContinuous =
+    validRows.length >= MIN_INACTIVITY_OBSERVATIONS &&
+    hasStartCoverage &&
+    hasEndCoverage &&
+    !hasInternalGap;
+
+  return {
+    observation_count: validRows.length,
+    first_observation_at: firstAt.toISOString(),
+    latest_observation_at: latestAt.toISOString(),
+    expected_cadence_minutes: roundTo(expectedCadenceMinutes, 2),
+    max_gap_minutes: roundTo(maxGapMinutes, 2),
+    largest_gap_minutes:
+      largestGapMinutes !== null ? roundTo(largestGapMinutes, 2) : null,
+    coverage_ratio: roundTo(coverageRatio, 3),
+    has_start_coverage: hasStartCoverage,
+    has_end_coverage: hasEndCoverage,
+    has_internal_gap: hasInternalGap,
+    data_continuous: dataContinuous,
+    quiet_observation_count: quietObservationCount,
+    quiet_proportion: roundTo(quietProportion, 3),
+    active_observation_count: activeObservationCount,
+    stationary_duration_minutes:
+      dataContinuous && allQuiet ? roundTo(observedSpanMinutes, 2) : null,
+    avg_score: roundTo(
+      average(
+        validRows
+          .map(({ row }) => scoreAvgOfBehaviorRow(row))
+          .filter((score) => score !== null),
+      ),
+      3,
+    ),
+  };
+}
+
+export function classifyInactiveWindow({
+  latestEvent,
+  behaviorRows,
+  windowStart,
+  windowEnd,
+}) {
+  const latestAt = eventTimestampOf(latestEvent);
+  if (!latestAt) {
+    return {
+      status: 'no_telemetry',
+      inactive: false,
+      last_communication_at: null,
+      stale_or_offline: true,
+      evidence: summarizeBehaviorCoverage([], windowStart, windowEnd),
+    };
+  }
+
+  if (!isFreshTimestamp(latestAt, windowEnd)) {
+    return {
+      status: 'stale_or_offline',
+      inactive: false,
+      last_communication_at: latestAt.toISOString(),
+      stale_or_offline: true,
+      evidence: summarizeBehaviorCoverage(behaviorRows, windowStart, windowEnd),
+    };
+  }
+
+  const evidence = summarizeBehaviorCoverage(behaviorRows, windowStart, windowEnd);
+  const coverageSufficient =
+    evidence.observation_count >= MIN_INACTIVITY_OBSERVATIONS &&
+    evidence.data_continuous;
+  const allQuiet =
+    evidence.observation_count > 0 &&
+    evidence.quiet_observation_count === evidence.observation_count;
+  const quietDurationSufficient =
+    evidence.stationary_duration_minutes !== null &&
+    evidence.stationary_duration_minutes >=
+      intervalMinutesBetween(windowStart, windowEnd) - evidence.max_gap_minutes;
+
+  if (!coverageSufficient) {
+    return {
+      status: 'insufficient_data',
+      inactive: false,
+      last_communication_at: latestAt.toISOString(),
+      stale_or_offline: false,
+      evidence,
+    };
+  }
+
+  if (!allQuiet) {
+    return {
+      status: 'mixed_or_active',
+      inactive: false,
+      last_communication_at: latestAt.toISOString(),
+      stale_or_offline: false,
+      evidence,
+    };
+  }
+
+  if (!quietDurationSufficient) {
+    return {
+      status: 'low_activity_not_continuous_inactivity',
+      inactive: false,
+      last_communication_at: latestAt.toISOString(),
+      stale_or_offline: false,
+      evidence,
+    };
+  }
+
+  return {
+    status: 'inactive',
+    inactive: true,
+    last_communication_at: latestAt.toISOString(),
+    stale_or_offline: false,
+    evidence,
+  };
+}
+
+function compareWindowRows(rows, windowStart, windowEnd) {
+  const coverage = summarizeBehaviorCoverage(rows, windowStart, windowEnd);
+  return {
+    from: windowStart.toISOString(),
+    to: windowEnd.toISOString(),
+    observation_count: coverage.observation_count,
+    first_observation_at: coverage.first_observation_at,
+    latest_observation_at: coverage.latest_observation_at,
+    avg_score: coverage.avg_score,
+    quiet_proportion: coverage.quiet_proportion,
+    data_continuous: coverage.data_continuous,
+    coverage_ratio: coverage.coverage_ratio,
+    stationary_duration_minutes: coverage.stationary_duration_minutes,
+  };
 }
 
 const nodeService = {
@@ -374,6 +670,232 @@ async getLatestNodeEventById(req, res) {
     } catch (err) {
       console.error(`[GET] Unexpected error fetching battery timeline for ${id}:`, err.message);
       return res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  },
+
+  async getInactiveNodes(req, res) {
+    const parsedMinutes = parseBoundedIntegerValue(req.query.minutes, {
+      min: MIN_INACTIVITY_WINDOW_MINUTES,
+      max: MAX_INACTIVITY_WINDOW_MINUTES,
+      defaultValue: DEFAULT_INACTIVITY_WINDOW_MINUTES,
+    });
+
+    if (!parsedMinutes.ok) {
+      return res.status(400).json({
+        error: 'invalid_minutes',
+        min_minutes: MIN_INACTIVITY_WINDOW_MINUTES,
+        max_minutes: MAX_INACTIVITY_WINDOW_MINUTES,
+      });
+    }
+
+    const now = new Date();
+    const windowEnd = now;
+    const windowStart = new Date(
+      now.getTime() - parsedMinutes.value * 60 * 1000,
+    );
+
+    try {
+      const [nodesResult, latestEventsResult, behaviorResult] = await Promise.all([
+        supabase.from('nodes').select('id,name,tag_id'),
+        supabase
+          .from('latest_node_events')
+          .select('node_id,created_at,event_data')
+          .limit(1000),
+        supabase
+          .from('behavior_features')
+          .select(
+            'node_id,created_at,movement_mode,score_avg,quiet_ratio,active_ratio',
+          )
+          .gte('created_at', windowStart.toISOString())
+          .lte('created_at', windowEnd.toISOString())
+          .order('created_at', { ascending: true })
+          .limit(MAX_RECENT_BEHAVIOR_ROWS),
+      ]);
+
+      if (nodesResult.error) throw nodesResult.error;
+      if (latestEventsResult.error) throw latestEventsResult.error;
+      if (behaviorResult.error) throw behaviorResult.error;
+
+      const latestByNodeId = new Map(
+        (latestEventsResult.data ?? []).map((event) => [event.node_id, event]),
+      );
+      const behaviorByNodeId = groupRowsByNodeId(behaviorResult.data);
+
+      const items = [];
+
+      for (const node of nodesResult.data ?? []) {
+        const latestEvent = latestByNodeId.get(node.id) ?? null;
+        const classification = classifyInactiveBehaviorWindow({
+          latestEvent,
+          behaviorRows: behaviorByNodeId.get(node.id) ?? [],
+          windowStart,
+          windowEnd,
+        });
+
+        if (!classification.inactive) {
+          continue;
+        }
+
+        items.push({
+          node_id: node.id,
+          name: node.name ?? null,
+          tag_id: node.tag_id ?? null,
+          classification: classification.status,
+          requested_window_minutes: parsedMinutes.value,
+          last_communication_at: classification.last_communication_at,
+          stale_or_offline: classification.stale_or_offline,
+          latest_battery_voltage: batteryVoltageOfEvent(latestEvent),
+          evidence: classification.evidence,
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        evaluated_at: windowEnd.toISOString(),
+        requested_window_minutes: parsedMinutes.value,
+        items,
+      });
+    } catch (err) {
+      console.error('[GET] Error fetching inactive nodes:', err.message);
+      return res.status(500).json({
+        error: 'Failed to fetch inactive nodes',
+        details: err.message,
+      });
+    }
+  },
+
+  async getNodeAnomalyEvidenceById(req, res) {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Missing node ID in request parameters' });
+    }
+
+    const parsedComparisonMinutes = parseBoundedIntegerValue(
+      req.query.comparison_minutes,
+      {
+        min: MIN_EVIDENCE_COMPARISON_MINUTES,
+        max: MAX_EVIDENCE_COMPARISON_MINUTES,
+        defaultValue: DEFAULT_EVIDENCE_COMPARISON_MINUTES,
+      },
+    );
+    if (!parsedComparisonMinutes.ok) {
+      return res.status(400).json({
+        error: 'invalid_comparison_minutes',
+        min_minutes: MIN_EVIDENCE_COMPARISON_MINUTES,
+        max_minutes: MAX_EVIDENCE_COMPARISON_MINUTES,
+      });
+    }
+
+    const parsedBaselineHours = parseBoundedIntegerValue(req.query.baseline_hours, {
+      min: MIN_EVIDENCE_BASELINE_HOURS,
+      max: MAX_EVIDENCE_BASELINE_HOURS,
+      defaultValue: DEFAULT_EVIDENCE_BASELINE_HOURS,
+    });
+    if (!parsedBaselineHours.ok) {
+      return res.status(400).json({
+        error: 'invalid_baseline_hours',
+        min_hours: MIN_EVIDENCE_BASELINE_HOURS,
+        max_hours: MAX_EVIDENCE_BASELINE_HOURS,
+      });
+    }
+
+    const now = new Date();
+    const comparisonWindowEnd = now;
+    const comparisonWindowStart = new Date(
+      now.getTime() - parsedComparisonMinutes.value * 60 * 1000,
+    );
+    const baselineWindowEnd = comparisonWindowStart;
+    const baselineWindowStart = new Date(
+      baselineWindowEnd.getTime() - parsedBaselineHours.value * 60 * 60 * 1000,
+    );
+
+    try {
+      const [latestEventResult, recentRowsResult, baselineRowsResult] =
+        await Promise.all([
+          supabase
+            .from('latest_node_events')
+            .select('node_id,created_at,event_data')
+            .eq('node_id', id)
+            .maybeSingle(),
+          supabase
+            .from('behavior_features')
+            .select('node_id,created_at,movement_mode,score_avg')
+            .eq('node_id', id)
+            .gte('created_at', comparisonWindowStart.toISOString())
+            .lte('created_at', comparisonWindowEnd.toISOString())
+            .order('created_at', { ascending: true })
+            .limit(1000),
+          supabase
+            .from('behavior_features')
+            .select('node_id,created_at,movement_mode,score_avg')
+            .eq('node_id', id)
+            .gte('created_at', baselineWindowStart.toISOString())
+            .lt('created_at', baselineWindowEnd.toISOString())
+            .order('created_at', { ascending: true })
+            .limit(5000),
+        ]);
+
+      if (latestEventResult.error) throw latestEventResult.error;
+      if (recentRowsResult.error) throw recentRowsResult.error;
+      if (baselineRowsResult.error) throw baselineRowsResult.error;
+
+      const latestEvent = latestEventResult.data ?? null;
+      const recentRows = recentRowsResult.data ?? [];
+      const baselineRows = baselineRowsResult.data ?? [];
+      const recentSummary = buildCompareWindowSummary(
+        recentRows,
+        comparisonWindowStart,
+        comparisonWindowEnd,
+      );
+      const baselineSummary = buildCompareWindowSummary(
+        baselineRows,
+        baselineWindowStart,
+        baselineWindowEnd,
+      );
+      const recentMeasure = recentSummary.avg_score;
+      const baselineMeasure = baselineSummary.avg_score;
+      const deviationAbsolute =
+        recentMeasure !== null && baselineMeasure !== null
+          ? roundTo(recentMeasure - baselineMeasure, 3)
+          : null;
+      const deviationPercent =
+        recentMeasure !== null &&
+        baselineMeasure !== null &&
+        baselineMeasure > 0
+          ? roundTo(((recentMeasure - baselineMeasure) / baselineMeasure) * 100, 2)
+          : null;
+      const dataSufficient =
+        recentSummary.observation_count >= MIN_INACTIVITY_OBSERVATIONS &&
+        baselineSummary.observation_count >= 6 &&
+        recentSummary.data_continuous &&
+        baselineSummary.observation_count > 0;
+
+      return res.status(200).json({
+        ok: true,
+        node_id: id,
+        comparison_window: recentSummary,
+        baseline_window: baselineSummary,
+        recent_activity_measure: recentMeasure,
+        baseline_activity_measure: baselineMeasure,
+        deviation_absolute: deviationAbsolute,
+        deviation_percent: deviationPercent,
+        stationary_duration_minutes: recentSummary.stationary_duration_minutes,
+        data_sufficient: dataSufficient,
+        insufficient_data_reason: dataSufficient
+          ? null
+          : 'insufficient_behavior_history',
+        last_communication_at:
+          latestEvent?.created_at ? new Date(latestEvent.created_at).toISOString() : null,
+        stale_or_offline: latestEvent?.created_at
+          ? !isFreshTelemetryTimestamp(new Date(latestEvent.created_at), comparisonWindowEnd)
+          : true,
+      });
+    } catch (err) {
+      console.error(`[GET] Error fetching anomaly evidence for node ${id}:`, err.message);
+      return res.status(500).json({
+        error: 'Failed to fetch anomaly evidence',
+        details: err.message,
+      });
     }
   },
 
