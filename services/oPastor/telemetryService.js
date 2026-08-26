@@ -3,6 +3,7 @@ import { publish, TOPICS } from "../../utils/mqttService.js";
 import { createFenceBreachOrder } from "./ordersService.js";
 import { sendToTopic } from "../../fcm.js";
 import { analyzeNodeEvent } from "./behavior/behaviorAnalysisService.js";
+import { normalizeOptionalGpsTimestamp } from "./telemetryNormalization.js";
 
 const AlertTypes = {
   1: "LOW_BATTERY",
@@ -272,14 +273,45 @@ export async function batchTelemetry(req, res) {
           gps_profile_applied: normalizeOptionalText(
             eventData.gps_profile_applied ?? eventData.gpsProfileApplied,
           ),
-          last_gps_attempt_at: normalizeOptionalDate(
+          last_gps_attempt_at: normalizeOptionalGpsTimestamp(
             eventData.last_gps_attempt_at ?? eventData.lastGpsAttemptAt,
           ),
-          last_gps_fix_at: normalizeOptionalDate(
+          last_gps_fix_at: normalizeOptionalGpsTimestamp(
             eventData.last_gps_fix_at ?? eventData.lastGpsFixAt,
           ),
           gps_fix_age_minutes: normalizeOptionalInteger(
             eventData.gps_fix_age_minutes ?? eventData.gpsFixAgeMinutes,
+          ),
+          gps_result: normalizeOptionalText(
+            eventData.gps_result ?? eventData.gpsResult,
+          ),
+          gps_attempt_duration_ms: normalizeOptionalInteger(
+            eventData.gps_attempt_duration_ms ?? eventData.gpsAttemptDurationMs,
+          ),
+          gps_fix_success:
+            eventData.gps_fix_success ?? eventData.gpsFixSuccess ?? null,
+          gps_timeout: eventData.gps_timeout ?? eventData.gpsTimeout ?? null,
+          gps_ttff_ms: normalizeOptionalInteger(
+            eventData.gps_ttff_ms ?? eventData.gpsTtffMs,
+          ),
+          gps_max_satellites: normalizeOptionalInteger(
+            eventData.gps_max_satellites ?? eventData.gpsMaxSatellites,
+          ),
+          gps_best_hdop: normalizeOptionalInteger(
+            eventData.gps_best_hdop ?? eventData.gpsBestHdop,
+          ),
+          gps_first_nmea_ms: normalizeOptionalInteger(
+            eventData.gps_first_nmea_ms ?? eventData.gpsFirstNmeaMs,
+          ),
+          gps_nmea_chars: normalizeOptionalInteger(
+            eventData.gps_nmea_chars ?? eventData.gpsNmeaChars,
+          ),
+          gps_start_reason: normalizeOptionalText(
+            eventData.gps_start_reason ?? eventData.gpsStartReason,
+          ),
+          gps_timeout_policy_version: normalizeOptionalInteger(
+            eventData.gps_timeout_policy_version ??
+              eventData.gpsTimeoutPolicyVersion,
           ),
           ...(motionWindow ? { motion_window: motionWindow } : {}),
         },
