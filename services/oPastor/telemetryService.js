@@ -62,6 +62,15 @@ function normalizeMotionWindow(value) {
   };
 }
 
+function normalizeGpsQualityCheckpoints(value) {
+  if (!Array.isArray(value)) return null;
+  return value.slice(0, 4).map((checkpoint) => ({
+    at_ms: normalizeOptionalInteger(checkpoint?.at_ms),
+    satellites: normalizeOptionalInteger(checkpoint?.satellites),
+    hdop_x100: normalizeOptionalInteger(checkpoint?.hdop_x100),
+  }));
+}
+
 function normalizeOptionalInteger(value) {
   const num = Number(value);
   if (!Number.isInteger(num)) {
@@ -216,6 +225,9 @@ export async function batchTelemetry(req, res) {
       const telemetryFlags =
         eventData.telemetry_flags ?? eventData.telemetry_mode ?? 0;
       const motionWindow = normalizeMotionWindow(eventData.motion_window);
+      const gpsQualityCheckpoints = normalizeGpsQualityCheckpoints(
+        eventData.gps_quality_checkpoints,
+      );
       const eventPayload = {
         node_id: nodeId,
         base_id: baseId,
@@ -306,6 +318,21 @@ export async function batchTelemetry(req, res) {
           gps_nmea_chars: normalizeOptionalInteger(
             eventData.gps_nmea_chars ?? eventData.gpsNmeaChars,
           ),
+          gps_first_3_sats_ms: normalizeOptionalInteger(
+            eventData.gps_first_3_sats_ms ?? eventData.gpsFirst3SatsMs,
+          ),
+          gps_first_4_sats_ms: normalizeOptionalInteger(
+            eventData.gps_first_4_sats_ms ?? eventData.gpsFirst4SatsMs,
+          ),
+          motion_since_last_fix_score_sum: normalizeOptionalInteger(
+            eventData.motion_since_last_fix_score_sum,
+          ),
+          motion_since_last_fix_sample_count: normalizeOptionalInteger(
+            eventData.motion_since_last_fix_sample_count,
+          ),
+          motion_since_last_fix_peak_score: normalizeOptionalInteger(
+            eventData.motion_since_last_fix_peak_score,
+          ),
           gps_start_reason: normalizeOptionalText(
             eventData.gps_start_reason ?? eventData.gpsStartReason,
           ),
@@ -313,6 +340,9 @@ export async function batchTelemetry(req, res) {
             eventData.gps_timeout_policy_version ??
               eventData.gpsTimeoutPolicyVersion,
           ),
+          ...(gpsQualityCheckpoints
+            ? { gps_quality_checkpoints: gpsQualityCheckpoints }
+            : {}),
           ...(motionWindow ? { motion_window: motionWindow } : {}),
         },
       };
