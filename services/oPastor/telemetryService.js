@@ -3,7 +3,10 @@ import { publish, TOPICS } from "../../utils/mqttService.js";
 import { createFenceBreachOrder } from "./ordersService.js";
 import { sendToTopic } from "../../fcm.js";
 import { analyzeNodeEvent } from "./behavior/behaviorAnalysisService.js";
-import { normalizeOptionalGpsTimestamp } from "./telemetryNormalization.js";
+import {
+  normalizeGpsQualityCheckpoints,
+  normalizeOptionalGpsTimestamp,
+} from "./telemetryNormalization.js";
 
 const AlertTypes = {
   1: "LOW_BATTERY",
@@ -62,16 +65,10 @@ function normalizeMotionWindow(value) {
   };
 }
 
-function normalizeGpsQualityCheckpoints(value) {
-  if (!Array.isArray(value)) return null;
-  return value.slice(0, 4).map((checkpoint) => ({
-    at_ms: normalizeOptionalInteger(checkpoint?.at_ms),
-    satellites: normalizeOptionalInteger(checkpoint?.satellites),
-    hdop_x100: normalizeOptionalInteger(checkpoint?.hdop_x100),
-  }));
-}
-
 function normalizeOptionalInteger(value) {
+  if (value == null) {
+    return null;
+  }
   const num = Number(value);
   if (!Number.isInteger(num)) {
     return null;

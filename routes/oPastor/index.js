@@ -8,6 +8,7 @@ import fenceRoutes from './fenceRoutes.js';
 import configRoutes from './configRoutes.js';
 import phonebookRoutes from './phonebookRoutes.js';
 import calibrationRoutes from './calibrationRoutes.js';
+import collarRegistryRoutes from './collarRegistryRoutes.js';
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.use('/fences', fenceRoutes);
 router.use('/config', configRoutes);
 router.use('/phonebook', phonebookRoutes);
 router.use('/calibration', calibrationRoutes);
+router.use('/bases', collarRegistryRoutes);
 
 export default router;

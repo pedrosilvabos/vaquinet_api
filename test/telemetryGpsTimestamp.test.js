@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { normalizeOptionalGpsTimestamp } from "../services/oPastor/telemetryNormalization.js";
+import {
+  normalizeGpsQualityCheckpoints,
+  normalizeOptionalGpsTimestamp,
+} from "../services/oPastor/telemetryNormalization.js";
 
 test("normalizeOptionalGpsTimestamp converts valid Unix seconds and rejects sentinel values", () => {
   assert.equal(
@@ -15,4 +18,33 @@ test("normalizeOptionalGpsTimestamp converts valid Unix seconds and rejects sent
   assert.equal(normalizeOptionalGpsTimestamp(2147483647), null);
   assert.equal(normalizeOptionalGpsTimestamp("2147483647"), null);
   assert.equal(normalizeOptionalGpsTimestamp(0), null);
+});
+
+test("normalizeGpsQualityCheckpoints preserves omitted unset checkpoints", () => {
+  assert.deepEqual(
+    normalizeGpsQualityCheckpoints([
+      { at_ms: 20000, satellites: 0, hdop_x100: null },
+      { at_ms: 30000, satellites: 0, hdop_x100: null },
+    ]),
+    [
+      { at_ms: 20000, satellites: 0, hdop_x100: null },
+      { at_ms: 30000, satellites: 0, hdop_x100: null },
+    ],
+  );
+  assert.deepEqual(normalizeGpsQualityCheckpoints([]), []);
+});
+
+test("optional integer normalization preserves motion snapshot presence", () => {
+  assert.deepEqual(
+    normalizeGpsQualityCheckpoints([
+      { at_ms: 20000, satellites: 4, hdop_x100: 450 },
+      { at_ms: 30000, satellites: 0, hdop_x100: 0 },
+      { at_ms: null, satellites: null, hdop_x100: null },
+    ]),
+    [
+      { at_ms: 20000, satellites: 4, hdop_x100: 450 },
+      { at_ms: 30000, satellites: 0, hdop_x100: 0 },
+      { at_ms: null, satellites: null, hdop_x100: null },
+    ],
+  );
 });
