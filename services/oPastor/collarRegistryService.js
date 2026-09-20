@@ -1,4 +1,4 @@
-import { opastorDb as supabase } from '../../config/supabase.js';
+import { getOpastorServiceDb } from '../../config/supabase.js';
 
 const TABLE = 'base_collar_registry';
 const MAX_DELTA_ROWS = 128;
@@ -27,7 +27,7 @@ function publicRow(row) {
 }
 
 async function currentRevision(baseId) {
-  const { data, error } = await supabase
+  const { data, error } = await getOpastorServiceDb()
     .from(TABLE)
     .select('revision')
     .eq('base_id', baseId)
@@ -38,7 +38,7 @@ async function currentRevision(baseId) {
 }
 
 async function rowsFor(baseId, since) {
-  let query = supabase
+  let query = getOpastorServiceDb()
     .from(TABLE)
     .select('collar_id,cow_id,active,revision')
     .eq('base_id', baseId)
@@ -84,7 +84,7 @@ export async function putRegistryEntry(req, res) {
   }
 
   try {
-    const { data, error } = await supabase.rpc('upsert_base_collar_registry_entry', {
+    const { data, error } = await getOpastorServiceDb().rpc('upsert_base_collar_registry_entry', {
       p_base_id: baseId,
       p_collar_id: collarId,
       p_cow_id: cowId,

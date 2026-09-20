@@ -20,6 +20,20 @@ export const opastorDb = makeClient(
   'SUPABASE_OPASTOR_KEY',
 );
 
+// Keep privileged access isolated from the general application client.  The
+// collar registry is deliberately service-role-only because it controls Base
+// membership and physical collar assignments.
+let opastorServiceDb;
+export function getOpastorServiceDb() {
+  if (!opastorServiceDb) {
+    opastorServiceDb = makeClient(
+      'SUPABASE_OPASTOR_URL',
+      'SUPABASE_OPASTOR_SERVICE_ROLE_KEY',
+    );
+  }
+  return opastorServiceDb;
+}
+
 export const trailsDb = makeClient(
   'SUPABASE_TRAILS_URL',
   'SUPABASE_TRAILS_KEY',
