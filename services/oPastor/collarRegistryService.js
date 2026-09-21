@@ -21,9 +21,17 @@ function publicRow(row) {
   return {
     collar_id: row.collar_id,
     cow_id: row.cow_id,
+    slot: Number(row.slot),
     active: row.active === true,
     revision: Number(row.revision),
   };
+}
+
+function slotOf(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (!/^\d+$/.test(String(value))) return undefined;
+  const slot = Number(value);
+  return Number.isInteger(slot) && slot >= 0 && slot <= 31 ? slot : undefined;
 }
 
 async function currentRevision(baseId) {
@@ -40,7 +48,7 @@ async function currentRevision(baseId) {
 async function rowsFor(baseId, since) {
   let query = getOpastorServiceDb()
     .from(TABLE)
-    .select('collar_id,cow_id,active,revision')
+    .select('collar_id,cow_id,slot,active,revision')
     .eq('base_id', baseId)
     .order('revision', { ascending: true });
   if (since > 0) query = query.gt('revision', since).limit(MAX_DELTA_ROWS + 1);
@@ -78,9 +86,13 @@ export async function putRegistryEntry(req, res) {
   const baseId = baseIdOf(req);
   const collarId = collarIdOf(req.body?.collar_id);
   const cowId = String(req.body?.cow_id ?? '').trim();
+  const slot = slotOf(req.body?.slot);
   const active = req.body?.active !== false;
   if (!baseId || !/^[0-9A-F]{12}$/.test(collarId) || !cowId) {
     return res.status(400).json({ error: 'base_id_collar_id_and_cow_id_required' });
+  }
+  if (slot === undefined) {
+    return res.status(400).json({ error: 'slot_must_be_an_integer_between_0_and_31' });
   }
 
   try {
@@ -89,6 +101,7 @@ export async function putRegistryEntry(req, res) {
       p_collar_id: collarId,
       p_cow_id: cowId,
       p_active: active,
+      p_slot: slot,
     });
     if (error) throw error;
     return res.status(200).json({ record: publicRow(data?.[0] ?? {}) });
@@ -100,4 +113,4 @@ export async function putRegistryEntry(req, res) {
 
 // Kept deliberately small so the request boundary can be exercised without a
 // live Supabase instance. Database revision ordering is covered by the SQL RPC.
-export const __test = { collarIdOf, parseSince, publicRow };
+export const __test = { collarIdOf, parseSince, publicRow, slotOf };

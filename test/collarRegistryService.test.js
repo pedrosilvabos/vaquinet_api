@@ -14,7 +14,16 @@ test('registry cursor accepts only non-negative integer revisions', () => {
 test('registry rows normalize the physical collar identity and public shape', () => {
   assert.equal(__test.collarIdOf(' 7c91ab03e821 '), '7C91AB03E821');
   assert.deepEqual(
-    __test.publicRow({ collar_id: '7C91AB03E821', cow_id: 'cow_7', active: true, revision: '51' }),
-    { collar_id: '7C91AB03E821', cow_id: 'cow_7', active: true, revision: 51 },
+    __test.publicRow({ collar_id: '7C91AB03E821', cow_id: 'cow_7', slot: '7', active: true, revision: '51' }),
+    { collar_id: '7C91AB03E821', cow_id: 'cow_7', slot: 7, active: true, revision: 51 },
   );
+});
+
+test('registry slots are explicit bounded integers', () => {
+  assert.equal(__test.slotOf(undefined), null);
+  assert.equal(__test.slotOf(0), 0);
+  assert.equal(__test.slotOf('31'), 31);
+  assert.equal(__test.slotOf(-1), undefined);
+  assert.equal(__test.slotOf('cow12'), undefined);
+  assert.equal(__test.slotOf(32), undefined);
 });
