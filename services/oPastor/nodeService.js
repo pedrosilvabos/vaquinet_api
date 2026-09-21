@@ -33,6 +33,27 @@ export async function publishNodeList() {
 const LOW_BATTERY_VOLTAGE = 3.6;
 const DEFAULT_ACTIVITY_LIMIT = 20;
 const MAX_ACTIVITY_LIMIT = 100;
+const MAX_DISPLAY_NAME_LENGTH = 100;
+
+// Technical node IDs are immutable domain keys. This normalizes only the
+// mutable profile fields that an operator may edit.
+export function profileUpdateFrom(body = {}) {
+  const update = {};
+  const fields = ['name', 'tag_id', 'birth_date', 'breed'];
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      update[field] = body[field] == null ? null : String(body[field]).trim();
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(update, 'name')) {
+    if (!update.name) throw new Error('name must not be empty');
+    if (update.name.length > MAX_DISPLAY_NAME_LENGTH) {
+      throw new Error(`name must be at most ${MAX_DISPLAY_NAME_LENGTH} characters`);
+    }
+  }
+  return update;
+}
 const OFFLINE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_INACTIVITY_WINDOW_MINUTES = 60;
 const MIN_INACTIVITY_WINDOW_MINUTES = 15;
@@ -458,13 +479,11 @@ const nodeService = {
 
   async updateNode(req, res) {
     const { id } = req.params;
-    const cleanUpdate = {
-      name: req.body.name,
-      tag_id: req.body.tag_id || null,
-      birth_date: req.body.birth_date || null,
-      breed: req.body.breed || null
-    };
     try {
+      const cleanUpdate = profileUpdateFrom(req.body);
+      if (Object.keys(cleanUpdate).length === 0) {
+        return res.status(400).json({ error: 'at least one profile field is required' });
+      }
       const { data, error } = await supabase.from('nodes').update(cleanUpdate).eq('id', id).select().single();
       if (error) throw error;
       publish(TOPICS.UPDATE, data);

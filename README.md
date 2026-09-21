@@ -93,6 +93,39 @@ PORT=10001
 TEST_FCM_TOKEN=<local test token>
 ```
 
+Supabase roles are deliberately separate:
+
+```text
+SUPABASE_OPASTOR_URL
+SUPABASE_OPASTOR_KEY
+SUPABASE_OPASTOR_SERVICE_ROLE_KEY
+```
+
+`SUPABASE_OPASTOR_KEY` is the normal application client key.
+`SUPABASE_OPASTOR_SERVICE_ROLE_KEY` is server-only and is used only by the
+trusted collar-registry service client. It must never be shipped to a Base or
+Flutter app. The Base/API bearer token is a separate authentication layer.
+
+## Base collar registry
+
+The server is the sole writer of Base/collar membership. Registry rows use
+`base_id`, physical `collar_id`, logical `cow_id`, `active`, and a monotonic
+`revision`. The API exposes authenticated replica reads at:
+
+```http
+GET /opastor/bases/:baseId/collar-registry?since_revision=<n>
+```
+
+Responses are snapshot or delta records with `current_revision`; the Base
+persists the replica locally. The protected provisioning write is:
+
+```http
+PUT /opastor/bases/:baseId/collar-registry
+```
+
+See `ENDPOINTS.md` for response/body details. Registry operations use the
+server-only Supabase client, never a client-supplied credential.
+
 ---
 
 ## Current architecture notes
@@ -103,6 +136,10 @@ TEST_FCM_TOKEN=<local test token>
 - Backend-derived cow status is generated in `services/oPastor/farmService.js` from latest telemetry plus recent `node_events` behavior.
 - Phase 1 behavior analytics stores derived motion features in `behavior_features`; raw telemetry remains immutable in `node_events`.
 - Existing legacy aliases are preserved where already supported.
+- Telemetry ingestion accepts `node_id` as supplied by the Base; it does not
+  add or strip `ESPCOW_`. A registry-resolved Base now supplies canonical
+  logical `cow_id` values, while a Base registry miss may still use a
+  transitional legacy identifier.
 
 ---
 

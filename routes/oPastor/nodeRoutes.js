@@ -57,6 +57,7 @@ router.post(
 );
 router.get("/:id", nodeService.getNodeById);
 router.put("/:id", requireBearerToken, nodeService.updateNode);
+router.patch("/:id", requireBearerToken, nodeService.updateNode);
 router.delete("/:id", requireBearerToken, nodeService.deleteNode);
 
 router.post("/", requireBearerToken, nodeService.createNode);

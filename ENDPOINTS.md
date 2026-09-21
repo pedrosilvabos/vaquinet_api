@@ -14,6 +14,34 @@ Content-Type: application/json
 
 Read routes are currently public unless explicitly noted otherwise. Do not put secrets in this file.
 
+## Base collar registry
+
+Both registry routes require the normal Base/API bearer token. That token is
+not a Supabase key.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/opastor/bases/:baseId/collar-registry?since_revision=<n>` | Return a full snapshot (`n=0`) or bounded revision delta for that Base |
+| PUT | `/opastor/bases/:baseId/collar-registry` | Protected server/admin provisioning upsert |
+
+GET returns:
+
+```json
+{
+  "base_id": "base_001",
+  "current_revision": 1,
+  "mode": "snapshot",
+  "records": [
+    {"collar_id": "EEDD48F71668", "cow_id": "cow1", "active": true, "revision": 1}
+  ]
+}
+```
+
+`since_revision=0` always returns a snapshot. A normal delta returns records
+whose revision is greater than `since_revision`; an oversized delta is
+replaced with a snapshot. PUT accepts `collar_id`, `cow_id`, and optional
+`active` (default true), then calls the server-side registry RPC.
+
 ---
 
 ## Health
@@ -145,6 +173,11 @@ curl http://localhost:10001/farm/overview
 ## Nodes
 
 Mounted under `/opastor/nodes`.
+
+`node_id` is an opaque API/database key. Historical examples below use legacy
+`ESPCOW_*` values, but they are not a required API format. For an active Base
+registry mapping, new Base telemetry is expected to use the logical `cow_id`
+(for example `cow1`).
 
 ### `GET /opastor/nodes`
 
