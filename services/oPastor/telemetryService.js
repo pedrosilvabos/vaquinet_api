@@ -231,6 +231,9 @@ export async function batchTelemetry(req, res) {
         event_type: normalizedEventType,
         event_data: {
           telemetry_flags: telemetryFlags,
+          simulation_step_key: normalizeOptionalText(
+            eventData.simulation_step_key,
+          ),
           latitude: eventData.latitude ?? null,
           longitude: eventData.longitude ?? null,
           sat_count: eventData.sat_count ?? null,
