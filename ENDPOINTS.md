@@ -204,6 +204,21 @@ Query params:
 - `limit`: default `20`, max `100`
 - `include_gps`: default `false`; set `true` or `1` to include noisy `GPS fix` items
 
+### `GET /opastor/nodes/:id/area-status`
+
+Returns the latest valid GPS position evaluated against the enabled, farm-scoped
+fences already stored by the API. Possible semantic states include:
+
+- `inside_known_area` with `area: { id, name }`
+- `outside_known_areas` with `area: null`
+- `no_valid_position` with `position: null`
+- `no_areas_configured` with `area: null`
+- `multiple_matching_areas` when overlapping configured areas match
+- `farm_scope_unavailable` when no safe farm scope is available
+
+The endpoint reuses the existing latest-location rules and database geometry
+RPCs. It returns structured data and does not localize the response.
+
 Example response:
 
 ```json
