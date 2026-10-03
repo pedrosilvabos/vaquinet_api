@@ -30,9 +30,16 @@ function latestLocation({ latitude = 38.1, longitude = -27.1 } = {}) {
   };
 }
 
-function supabaseMock({ node = { id: "demo_cow_01", farm_id: "farm-a" }, areas = [], matches = [] } = {}) {
+function supabaseMock({ node = { id: "demo_cow_01", farm_id: "farm-a" }, base = null, areas = [], matches = [] } = {}) {
   return {
     from(table) {
+      if (table === "bases") {
+        return {
+          select() { return this; },
+          eq() { return this; },
+          async maybeSingle() { return { data: base, error: null }; },
+        };
+      }
       assert.equal(table, "nodes");
       return {
         select() { return this; },
@@ -105,6 +112,33 @@ test("area endpoint uses the animal farm scope and does not select another farm"
   await makeAreaStatusService({
     supabase,
     latestLocationFinder: async () => latestLocation(),
+  }).getNodeAreaStatus({ params: { id: "demo_cow_01" } }, res);
+
+  assert.equal(res.body.areaStatus, AREA_STATUS.OUTSIDE_KNOWN_AREAS);
+  assert.deepEqual(calls.map((call) => call.args.p_farm_id), ["farm-a", "farm-a"]);
+});
+
+test("area endpoint resolves farm through the latest event Base ownership", async () => {
+  const res = response();
+  const calls = [];
+  const supabase = supabaseMock({
+    node: { id: "demo_cow_01" },
+    base: { id: "base_001", farm_id: "farm-a" },
+    areas: [{ id: "pasture-a", name: "Farm A" }],
+    matches: [],
+  });
+  const originalRpc = supabase.rpc;
+  supabase.rpc = async (name, args) => {
+    calls.push({ name, args });
+    return originalRpc(name, args);
+  };
+
+  await makeAreaStatusService({
+    supabase,
+    latestLocationFinder: async () => ({
+      ...latestLocation(),
+      event: { base_id: "base_001", event_data: {} },
+    }),
   }).getNodeAreaStatus({ params: { id: "demo_cow_01" } }, res);
 
   assert.equal(res.body.areaStatus, AREA_STATUS.OUTSIDE_KNOWN_AREAS);
