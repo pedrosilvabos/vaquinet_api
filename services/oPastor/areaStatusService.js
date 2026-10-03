@@ -10,12 +10,6 @@ export const AREA_STATUS = Object.freeze({
   FARM_SCOPE_UNAVAILABLE: "farm_scope_unavailable",
 });
 
-function eventDataOf(event) {
-  return event?.event_data && typeof event.event_data === "object"
-    ? event.event_data
-    : {};
-}
-
 function areaIsEnabled(area) {
   if (!area || typeof area !== "object") return false;
   const props = area.props && typeof area.props === "object" ? area.props : {};
@@ -38,41 +32,101 @@ function areaFromHit(hit) {
   };
 }
 
-function directFarmId(node, latestObservation) {
-  const eventData = eventDataOf(latestObservation?.event);
-  return (
-    node?.farm_id ??
-    latestObservation?.event?.farm_id ??
-    eventData.farm_id ??
-    process.env.DEFAULT_FARM_ID ??
-    null
-  );
+function lookupDataShape(data, error) {
+  if (error) return "error";
+  if (data === null) return "null";
+  if (Array.isArray(data)) {
+    return data.length === 0 ? "empty_array" : "array";
+  }
+  if (typeof data === "object") return "object";
+  return typeof data;
 }
 
-async function resolveFarmScope({ supabase, node, latestObservation }) {
-  const directId = directFarmId(node, latestObservation);
-  if (directId) {
-    return { farmId: directId, source: "node_or_event" };
+async function resolveFarmScope({ supabase, animalId }) {
+  const latestEventLookup = await supabase
+    .from("latest_node_events")
+    .select("id,node_id,base_id,created_at")
+    .eq("node_id", animalId)
+    .maybeSingle();
+
+  const { data: latestEventData, error: latestEventError } = latestEventLookup;
+  console.info("[GET] Area-status latest event farm lookup", {
+    nodeId: animalId,
+    dataShape: lookupDataShape(latestEventData, latestEventError),
+    latestEventId: latestEventData?.id ?? null,
+    baseId: latestEventData?.base_id ?? null,
+    errorCode: latestEventError?.code ?? null,
+    errorMessage: latestEventError?.message ?? null,
+  });
+
+  if (latestEventError) {
+    latestEventError.farmScopeReason = "latest_event_query_error";
+    throw latestEventError;
   }
 
-  const baseId = latestObservation?.event?.base_id ?? node?.base_id ?? null;
-  if (baseId) {
-    const { data: base, error } = await supabase
-      .from("bases")
-      .select("id,farm_id")
-      .eq("id", baseId)
-      .maybeSingle();
-    if (error) throw error;
-    if (base?.farm_id) {
-      return { farmId: base.farm_id, source: "base_farm" };
-    }
+  if (Array.isArray(latestEventData) && latestEventData.length > 1) {
+    const resultShapeError = new Error("latest_node_events returned multiple rows");
+    resultShapeError.farmScopeReason = "latest_event_result_shape";
+    throw resultShapeError;
   }
 
-  if (process.env.DEFAULT_FARM_ID) {
-    return { farmId: process.env.DEFAULT_FARM_ID, source: "configured_default" };
+  const latestEvent = Array.isArray(latestEventData)
+    ? latestEventData[0] ?? null
+    : latestEventData;
+  if (!latestEvent) {
+    return {
+      farmId: null,
+      source: "latest_event",
+      reason: "no_latest_event",
+      latestEvent: null,
+      baseId: null,
+    };
   }
 
-  return { farmId: null, source: "unresolved" };
+  if (!latestEvent.base_id) {
+    return {
+      farmId: null,
+      source: "latest_event",
+      reason: "missing_base_id",
+      latestEvent,
+      baseId: null,
+    };
+  }
+
+  const { data: base, error: baseError } = await supabase
+    .from("bases")
+    .select("id,farm_id")
+    .eq("id", latestEvent.base_id)
+    .maybeSingle();
+
+  if (baseError) throw baseError;
+  if (!base) {
+    return {
+      farmId: null,
+      source: "latest_event_base",
+      reason: "base_not_found",
+      latestEvent,
+      baseId: latestEvent.base_id,
+    };
+  }
+
+  if (!base.farm_id) {
+    return {
+      farmId: null,
+      source: "latest_event_base",
+      reason: "missing_farm_id",
+      latestEvent,
+      baseId: base.id,
+    };
+  }
+
+  return {
+    farmId: base.farm_id,
+    source: "latest_event_base",
+    reason: null,
+    latestEvent,
+    baseId: base.id,
+  };
 }
 
 function positionFrom(latestObservation) {
@@ -166,17 +220,17 @@ export function makeAreaStatusService({
           });
         }
 
-        const farmScope = await resolveFarmScope({
-          supabase,
-          node,
-          latestObservation,
-        });
+        const farmScope = await resolveFarmScope({ supabase, animalId });
         const farmId = farmScope.farmId;
         if (!farmId) {
           console.warn("[GET] Farm scope unavailable", {
             nodeId: animalId,
-            baseId: latestObservation?.event?.base_id ?? node?.base_id ?? null,
+            latestEventId: farmScope.latestEvent?.id ?? null,
+            baseId: farmScope.baseId,
+            farmId: null,
             farmScopeSource: farmScope.source,
+            farmScopeResolved: false,
+            reason: farmScope.reason,
             areaStatus: AREA_STATUS.FARM_SCOPE_UNAVAILABLE,
             fenceCount: 0,
           });
@@ -195,8 +249,11 @@ export function makeAreaStatusService({
         if (areas.filter(areaIsEnabled).length === 0) {
           console.info("[GET] Area status resolved", {
             nodeId: animalId,
+            latestEventId: farmScope.latestEvent?.id ?? null,
+            baseId: farmScope.baseId,
             resolvedFarmId: farmId,
             farmScopeSource: farmScope.source,
+            farmScopeResolved: true,
             areaStatus: AREA_STATUS.NO_AREAS_CONFIGURED,
             fenceCount: 0,
           });
@@ -224,14 +281,22 @@ export function makeAreaStatusService({
           });
         console.info("[GET] Area status resolved", {
           nodeId: animalId,
+          latestEventId: farmScope.latestEvent?.id ?? null,
+          baseId: farmScope.baseId,
           resolvedFarmId: farmId,
           farmScopeSource: farmScope.source,
+          farmScopeResolved: true,
           areaStatus: result.areaStatus,
           fenceCount: areas.filter(areaIsEnabled).length,
         });
         return res.status(200).json(result);
       } catch (error) {
-        console.error("[GET] Failed to resolve animal area status:", error?.message ?? error);
+        console.error("[GET] Failed to resolve animal area status", {
+          nodeId: animalId,
+          reason: error?.farmScopeReason ?? "area_status_query_or_geometry_error",
+          errorCode: error?.code ?? null,
+          errorMessage: error?.message ?? String(error),
+        });
         return res.status(500).json({
           error: "failed_to_resolve_area_status",
           details: error?.message ?? String(error),

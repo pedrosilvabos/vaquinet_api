@@ -26,13 +26,32 @@ function latestLocation({ latitude = 38.1, longitude = -27.1 } = {}) {
   return {
     point: { latitude, longitude, timestamp: "2026-10-03T18:33:00Z" },
     timestamp: new Date("2026-10-03T18:33:00Z"),
-    event: { event_data: { farm_id: "farm-a" } },
+    event: { event_data: {} },
   };
 }
 
-function supabaseMock({ node = { id: "demo_cow_01", farm_id: "farm-a" }, base = null, areas = [], matches = [] } = {}) {
+function supabaseMock({
+  node = { id: "demo_cow_01" },
+  latestEvent = {
+    id: "event-1",
+    node_id: "demo_cow_01",
+    base_id: "base_001",
+    created_at: "2026-10-03T18:33:00Z",
+  },
+  latestEventError = null,
+  base = { id: "base_001", farm_id: "farm-a" },
+  areas = [],
+  matches = [],
+} = {}) {
   return {
     from(table) {
+      if (table === "latest_node_events") {
+        return {
+          select() { return this; },
+          eq() { return this; },
+          async maybeSingle() { return { data: latestEvent, error: latestEventError }; },
+        };
+      }
       if (table === "bases") {
         return {
           select() { return this; },
@@ -95,11 +114,13 @@ test("area endpoint distinguishes no position and no configured areas", async ()
   assert.equal(noAreasResponse.body.areaStatus, AREA_STATUS.NO_AREAS_CONFIGURED);
 });
 
-test("area endpoint uses the animal farm scope and does not select another farm", async () => {
+test("area endpoint uses the latest event Base farm and does not select another farm", async () => {
   const res = response();
   const calls = [];
   const supabase = supabaseMock({
-    node: { id: "demo_cow_01", farm_id: "farm-a" },
+    node: { id: "demo_cow_01", base_id: "base-from-nodes-farm-b" },
+    latestEvent: { id: "event-a", node_id: "demo_cow_01", base_id: "base_001" },
+    base: { id: "base_001", farm_id: "farm-a" },
     areas: [{ id: "pasture-a", name: "Farm A" }],
     matches: [],
   });
@@ -122,7 +143,8 @@ test("area endpoint resolves farm through the latest event Base ownership", asyn
   const res = response();
   const calls = [];
   const supabase = supabaseMock({
-    node: { id: "demo_cow_01" },
+    node: { id: "demo-cow-03" },
+    latestEvent: { id: "event-demo-03", node_id: "demo-cow-03", base_id: "base_001" },
     base: { id: "base_001", farm_id: "farm-a" },
     areas: [{ id: "pasture-a", name: "Farm A" }],
     matches: [],
@@ -139,10 +161,76 @@ test("area endpoint resolves farm through the latest event Base ownership", asyn
       ...latestLocation(),
       event: { base_id: "base_001", event_data: {} },
     }),
-  }).getNodeAreaStatus({ params: { id: "demo_cow_01" } }, res);
+  }).getNodeAreaStatus({ params: { id: "demo-cow-03" } }, res);
 
   assert.equal(res.body.areaStatus, AREA_STATUS.OUTSIDE_KNOWN_AREAS);
   assert.deepEqual(calls.map((call) => call.args.p_farm_id), ["farm-a", "farm-a"]);
+});
+
+test("area endpoint keeps farm scope unavailable when no latest event exists", async () => {
+  const res = response();
+  const calls = [];
+  const supabase = supabaseMock({ latestEvent: null, base: null });
+  const originalRpc = supabase.rpc;
+  supabase.rpc = async (name, args) => {
+    calls.push({ name, args });
+    return originalRpc(name, args);
+  };
+
+  await makeAreaStatusService({
+    supabase,
+    latestLocationFinder: async () => latestLocation(),
+  }).getNodeAreaStatus({ params: { id: "demo-cow-03" } }, res);
+
+  assert.equal(res.body.areaStatus, AREA_STATUS.FARM_SCOPE_UNAVAILABLE);
+  assert.deepEqual(calls, []);
+});
+
+test("area endpoint keeps farm scope unavailable when the event Base is missing", async () => {
+  const res = response();
+  const supabase = supabaseMock({
+    latestEvent: { id: "event-missing-base", node_id: "demo-cow-03", base_id: "base-missing" },
+    base: null,
+  });
+
+  await makeAreaStatusService({
+    supabase,
+    latestLocationFinder: async () => latestLocation(),
+  }).getNodeAreaStatus({ params: { id: "demo-cow-03" } }, res);
+
+  assert.equal(res.body.areaStatus, AREA_STATUS.FARM_SCOPE_UNAVAILABLE);
+});
+
+test("area endpoint keeps farm scope unavailable when the Base has no farm", async () => {
+  const res = response();
+  const supabase = supabaseMock({
+    latestEvent: { id: "event-missing-farm", node_id: "demo-cow-03", base_id: "base-001" },
+    base: { id: "base-001", farm_id: null },
+  });
+
+  await makeAreaStatusService({
+    supabase,
+    latestLocationFinder: async () => latestLocation(),
+  }).getNodeAreaStatus({ params: { id: "demo-cow-03" } }, res);
+
+  assert.equal(res.body.areaStatus, AREA_STATUS.FARM_SCOPE_UNAVAILABLE);
+});
+
+test("latest event query errors are not mislabeled as unavailable farm scope", async () => {
+  const res = response();
+  const queryError = Object.assign(new Error("permission denied for latest_node_events"), {
+    code: "42501",
+  });
+
+  await makeAreaStatusService({
+    supabase: supabaseMock({ latestEvent: null, latestEventError: queryError }),
+    latestLocationFinder: async () => latestLocation(),
+  }).getNodeAreaStatus({ params: { id: "demo-cow-03" } }, res);
+
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.body.error, "failed_to_resolve_area_status");
+  assert.match(res.body.details, /permission denied/);
+  assert.notEqual(res.body.areaStatus, AREA_STATUS.FARM_SCOPE_UNAVAILABLE);
 });
 
 test("area endpoint does not silently choose one overlapping area", async () => {
@@ -239,6 +327,8 @@ test("area endpoint reports unavailable farm scope instead of querying all fence
   const res = response();
   const supabase = supabaseMock({
     node: { id: "demo_cow_01" },
+    latestEvent: null,
+    base: null,
     areas: [{ id: "pasture-1", name: "North" }],
   });
   await makeAreaStatusService({
