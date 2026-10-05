@@ -329,6 +329,7 @@ const farmService = {
         gpsConfigResult,
         latestEventsResult,
         latestBehaviorResult,
+        latestBaselineResult,
         baseStatusResult,
         recentEventsResult,
         assignmentsResult,
@@ -348,6 +349,9 @@ const farmService = {
           .select(
             "node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate,animal_id",
           ),
+        supabase
+          .from("latest_animal_activity_baseline")
+          .select("animal_id,version,status,assessment,metric,current_score_avg,expected_score_avg,deviation_percent,robust_z,duration_minutes,anomaly_since,sample_days,sample_count,confidence,data_quality,time_bucket,timezone,observed_at"),
         supabase
           .from("base_status")
           .select("base_id,status_type,status_data,created_at")
@@ -369,6 +373,7 @@ const farmService = {
       if (gpsConfigResult.error) throw gpsConfigResult.error;
       if (latestEventsResult.error) throw latestEventsResult.error;
       if (latestBehaviorResult.error) throw latestBehaviorResult.error;
+      if (latestBaselineResult.error) throw latestBaselineResult.error;
       if (baseStatusResult.error) throw baseStatusResult.error;
       if (recentEventsResult.error) throw recentEventsResult.error;
       if (assignmentsResult.error) throw assignmentsResult.error;
@@ -384,6 +389,9 @@ const farmService = {
           row.node_id,
           normalizeBehavior(row),
         ]),
+      );
+      const baselineByAnimalId = new Map(
+        (latestBaselineResult.data || []).map((row) => [row.animal_id, row]),
       );
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
       const assignmentByNodeId = new Map(
@@ -425,6 +433,9 @@ const farmService = {
           created_at: node.created_at,
           latest_event: latestEvent,
           behavior: behaviorByNodeId.get(node.id) || null,
+          activity_baseline: baselineByAnimalId.get(
+            assignment?.animal_id ?? latestEvent?.animal_id ?? null,
+          ) || null,
           derived_status: deriveNodeStatus(
             latestEvent,
             recentByNodeId.get(node.id) || [],

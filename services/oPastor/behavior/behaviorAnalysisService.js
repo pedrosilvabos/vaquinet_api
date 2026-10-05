@@ -1,6 +1,7 @@
 import { opastorDb as supabase } from '../../../config/supabase.js';
 import { decodeMotionWindowScores } from './motionWindowDecoder.js';
 import { extractMotionFeatures } from './motionFeatureExtractor.js';
+import { processBehaviorFeature } from '../activityBaselineService.js';
 
 const FEATURE_VERSION = 'phase1_v1';
 const DUPLICATE_KEY_CODE = '23505';
@@ -117,6 +118,23 @@ export async function analyzeNodeEvent(nodeEvent) {
       };
     }
 
+    let baselineResult = null;
+    if (row.animal_id) {
+      try {
+        baselineResult = await processBehaviorFeature({
+          ...row,
+          id: data?.id ?? null,
+          created_at: nodeEvent.created_at ?? new Date().toISOString(),
+        });
+      } catch (baselineError) {
+        console.warn('[baseline] assessment failed:', {
+          nodeEventId: row.node_event_id,
+          animalId: row.animal_id,
+          error: baselineError?.message || String(baselineError),
+        });
+      }
+    }
+
     return {
       ok: true,
       status: 'inserted',
@@ -125,6 +143,7 @@ export async function analyzeNodeEvent(nodeEvent) {
       feature_version: FEATURE_VERSION,
       sample_quality: decoded.sampleQuality,
       movement_mode: features.movement_mode,
+      baseline: baselineResult,
     };
   } catch (error) {
     return {

@@ -9,6 +9,7 @@ import configRoutes from './configRoutes.js';
 import phonebookRoutes from './phonebookRoutes.js';
 import calibrationRoutes from './calibrationRoutes.js';
 import collarRegistryRoutes from './collarRegistryRoutes.js';
+import animalRoutes from './animalRoutes.js';
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use('/config', configRoutes);
 router.use('/phonebook', phonebookRoutes);
 router.use('/calibration', calibrationRoutes);
 router.use('/bases', collarRegistryRoutes);
+router.use('/animals', animalRoutes);
 
 export default router;
