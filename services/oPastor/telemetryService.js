@@ -361,8 +361,9 @@ export async function batchTelemetry(req, res) {
         continue;
       }
 
+      let behaviorResult = null;
       try {
-        const behaviorResult = await analyzeNodeEvent({
+        behaviorResult = await analyzeNodeEvent({
           id: insertedEvents.id,
           node_id: insertedEvents.node_id,
           animal_id: insertedEvents.animal_id,
@@ -482,7 +483,13 @@ export async function batchTelemetry(req, res) {
 
       results.push({
         nodeId,
-        status: "ok",
+        status: behaviorResult?.baseline?.status === "error" ? "partial" : "ok",
+        ...(behaviorResult?.baseline?.status === "error"
+          ? {
+              warning: "Event and behavior feature accepted, but baseline assessment failed",
+              baseline_status: "error",
+            }
+          : {}),
       });
     } catch (err) {
       results.push({

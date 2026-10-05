@@ -1,4 +1,4 @@
-import { opastorDb as supabase } from "../../config/supabase.js";
+import { opastorDb as supabase, getOpastorServiceDb } from "../../config/supabase.js";
 
 // Status derivation thresholds. Keep these conservative: they are API-side
 // presentation hints, not persisted animal health diagnoses.
@@ -317,9 +317,13 @@ function deriveGpsConfigState(desiredConfig, latestEvent) {
   };
 }
 
-const farmService = {
-  async getOverview(_req, res) {
+export async function getOverview(
+  _req,
+  res,
+  { publicDb = supabase, privilegedDb = null } = {},
+) {
     try {
+      const protectedDb = privilegedDb ?? getOpastorServiceDb();
       const recentWindowStart = new Date(
         Date.now() - RECENT_BEHAVIOR_WINDOW_MS,
       ).toISOString();
@@ -334,36 +338,36 @@ const farmService = {
         recentEventsResult,
         assignmentsResult,
       ] = await Promise.all([
-        supabase
+        publicDb
           .from("nodes")
           .select("id,name,tag_id,birth_date,breed,status,created_at")
           .order("created_at", { ascending: true }),
-        supabase
+        publicDb
           .from("node_gps_config")
           .select("node_id,gps_profile,gps_config_version,updated_at"),
-        supabase
+        publicDb
           .from("latest_node_events")
           .select("id,node_id,base_id,event_type,event_data,created_at,animal_id"),
-        supabase
+        publicDb
           .from("latest_node_behavior")
           .select(
             "node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate,animal_id",
           ),
-        supabase
+        protectedDb
           .from("latest_animal_activity_baseline")
           .select("animal_id,version,status,assessment,metric,current_score_avg,expected_score_avg,deviation_percent,robust_z,duration_minutes,anomaly_since,sample_days,sample_count,confidence,data_quality,time_bucket,timezone,observed_at"),
-        supabase
+        publicDb
           .from("base_status")
           .select("base_id,status_type,status_data,created_at")
           .order("created_at", { ascending: false })
           .limit(1000),
-        supabase
+        publicDb
           .from("node_events")
           .select("node_id,event_data,created_at")
           .gte("created_at", recentWindowStart)
           .order("created_at", { ascending: false })
           .limit(RECENT_EVENTS_BULK_LIMIT),
-        supabase
+        protectedDb
           .from("animal_node_assignments")
           .select("animal_id,node_id,farm_id,assigned_at,unassigned_at")
           .is("unassigned_at", null),
@@ -456,7 +460,10 @@ const farmService = {
         .status(500)
         .json({ error: "Failed to fetch farm overview", details: err.message });
     }
-  },
+}
+
+const farmService = {
+  getOverview,
 };
 
 export default farmService;

@@ -132,6 +132,11 @@ export async function analyzeNodeEvent(nodeEvent) {
           animalId: row.animal_id,
           error: baselineError?.message || String(baselineError),
         });
+        baselineResult = {
+          status: 'error',
+          reason: 'baseline_persistence_failed',
+          error: baselineError?.message || String(baselineError),
+        };
       }
     }
 

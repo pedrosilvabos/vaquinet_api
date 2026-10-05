@@ -1,4 +1,4 @@
-import { opastorDb as supabase } from '../../config/supabase.js';
+import { getOpastorServiceDb } from '../../config/supabase.js';
 import {
   farmLocalTwoHourBucket,
   getFarmTimezone,
@@ -320,7 +320,7 @@ async function loadPreviousAssessment(animalId, db) {
   };
 }
 
-export async function processBehaviorFeature(feature, { db = supabase, evaluatedAt } = {}) {
+export async function processBehaviorFeature(feature, { db = getOpastorServiceDb(), evaluatedAt } = {}) {
   if (!feature?.animal_id || !feature?.created_at) return { status: 'skipped', reason: 'unattributed' };
   const context = await animalContext(feature.animal_id, db);
   if (!context || context.timezone.status !== 'resolved') {
@@ -402,11 +402,12 @@ export async function processBehaviorFeature(feature, { db = supabase, evaluated
 }
 
 const activityBaselineService = {
-  async getAnimalBaseline(req, res) {
+  async getAnimalBaseline(req, res, { db = null } = {}) {
     const animalId = req.params.animalId?.trim();
     if (!animalId) return res.status(400).json({ error: 'animal_id_required' });
     try {
-      const { data, error } = await supabase
+      const client = db ?? getOpastorServiceDb();
+      const { data, error } = await client
         .from('latest_animal_activity_baseline')
         .select('*')
         .eq('animal_id', animalId)
