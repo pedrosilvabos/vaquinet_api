@@ -45,6 +45,7 @@ function featureRowOf(nodeEvent, motionWindow, features) {
   return {
     node_event_id: String(nodeEvent.id),
     node_id: nodeEvent.node_id ?? null,
+    animal_id: nodeEvent.animal_id ?? null,
     base_id: nodeEvent.base_id ?? null,
     feature_version: FEATURE_VERSION,
     sample_count: features.score_count,

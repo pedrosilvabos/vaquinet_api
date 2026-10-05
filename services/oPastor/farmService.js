@@ -236,6 +236,7 @@ function normalizeBehavior(row) {
   if (!row?.behavior_feature_id) return null;
 
   return {
+    animal_id: row.animal_id ?? null,
     node_event_id: row.node_event_id,
     behavior_feature_id: row.behavior_feature_id,
     behavior_created_at: row.behavior_created_at,
@@ -330,6 +331,7 @@ const farmService = {
         latestBehaviorResult,
         baseStatusResult,
         recentEventsResult,
+        assignmentsResult,
       ] = await Promise.all([
         supabase
           .from("nodes")
@@ -340,11 +342,11 @@ const farmService = {
           .select("node_id,gps_profile,gps_config_version,updated_at"),
         supabase
           .from("latest_node_events")
-          .select("id,node_id,base_id,event_type,event_data,created_at"),
+          .select("id,node_id,base_id,event_type,event_data,created_at,animal_id"),
         supabase
           .from("latest_node_behavior")
           .select(
-            "node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate",
+            "node_id,node_event_id,behavior_feature_id,behavior_created_at,movement_mode,sample_quality,sample_count,valid_count,count_mismatch,score_min,score_max,score_avg,score_range,score_stddev,quiet_ratio,active_ratio,spike_count,inactivity_candidate,abnormal_activity_candidate,animal_id",
           ),
         supabase
           .from("base_status")
@@ -357,6 +359,10 @@ const farmService = {
           .gte("created_at", recentWindowStart)
           .order("created_at", { ascending: false })
           .limit(RECENT_EVENTS_BULK_LIMIT),
+        supabase
+          .from("animal_node_assignments")
+          .select("animal_id,node_id,farm_id,assigned_at,unassigned_at")
+          .is("unassigned_at", null),
       ]);
 
       if (nodesResult.error) throw nodesResult.error;
@@ -365,6 +371,7 @@ const farmService = {
       if (latestBehaviorResult.error) throw latestBehaviorResult.error;
       if (baseStatusResult.error) throw baseStatusResult.error;
       if (recentEventsResult.error) throw recentEventsResult.error;
+      if (assignmentsResult.error) throw assignmentsResult.error;
 
       const gpsConfigByNodeId = new Map(
         (gpsConfigResult.data || []).map((row) => [row.node_id, row]),
@@ -379,6 +386,12 @@ const farmService = {
         ]),
       );
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
+      const assignmentByNodeId = new Map(
+        (assignmentsResult.data || []).map((assignment) => [
+          assignment.node_id,
+          assignment,
+        ]),
+      );
 
       const nodes = (nodesResult.data || []).map((node) => {
         const latestEvent = normalizeLegacyBasePowerPlaceholders(
@@ -390,9 +403,20 @@ const farmService = {
           latestEvent,
         );
         const { last_lat, last_lng } = resolveLastPosition(latestEvent);
+        const assignment = assignmentByNodeId.get(node.id) || null;
 
         return {
+          // `id` remains the legacy node identifier for existing clients.
           id: node.id,
+          node_id: node.id,
+          animal_id: assignment?.animal_id ?? latestEvent?.animal_id ?? null,
+          farm_id: assignment?.farm_id ?? null,
+          assignment: assignment
+            ? {
+                assigned_at: assignment.assigned_at,
+                unassigned_at: assignment.unassigned_at,
+              }
+            : null,
           name: node.name,
           tag_id: node.tag_id,
           birth_date: node.birth_date,

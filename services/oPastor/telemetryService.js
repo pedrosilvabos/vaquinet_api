@@ -350,7 +350,7 @@ export async function batchTelemetry(req, res) {
       const { data: insertedEvents, error: eventError } = await supabase
         .from("node_events")
         .insert([eventPayload])
-        .select("id")
+        .select("id,node_id,base_id,animal_id,event_data,created_at")
         .single();
       if (eventError) {
         results.push({
@@ -364,9 +364,11 @@ export async function batchTelemetry(req, res) {
       try {
         const behaviorResult = await analyzeNodeEvent({
           id: insertedEvents.id,
-          node_id: eventPayload.node_id,
-          base_id: eventPayload.base_id,
-          event_data: eventPayload.event_data,
+          node_id: insertedEvents.node_id,
+          animal_id: insertedEvents.animal_id,
+          base_id: insertedEvents.base_id,
+          event_data: insertedEvents.event_data,
+          created_at: insertedEvents.created_at,
         });
         if (behaviorResult?.ok === false) {
           console.warn("[behavior] analysis failed:", {

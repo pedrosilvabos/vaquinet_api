@@ -6,6 +6,7 @@ import areaStatusService from "../../services/oPastor/areaStatusService.js";
 import gpsConfigService from "../../services/oPastor/gpsConfigService.js";
 import { batchTelemetry } from "../../services/oPastor/telemetryService.js";
 import { requireBearerToken } from "../../middleware/auth.js";
+import animalIdentityService from "../../services/oPastor/animalIdentityService.js";
 
 const router = express.Router();
 
@@ -18,6 +19,16 @@ const router = express.Router();
 
 router.get("/latest/:id", nodeService.getLatestNodeEventById);
 router.get("/", nodeService.getAllNodes);
+router.get(
+  "/animals/:animalId/node-assignment",
+  requireBearerToken,
+  animalIdentityService.getCurrentNodeAssignment,
+);
+router.post(
+  "/animals/:animalId/node-assignment",
+  requireBearerToken,
+  animalIdentityService.replaceNodeAssignment,
+);
 router.get("/inactive", nodeService.getInactiveNodes);
 router.get("/:id/events", nodeService.getNodeEventsById);
 router.get("/:id/location/latest", coverageService.getLatestNodeLocation);
