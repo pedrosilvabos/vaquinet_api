@@ -3,6 +3,7 @@ import {
   farmLocalTwoHourBucket,
   getFarmTimezone,
 } from './animalIdentityService.js';
+import { interpretActivity } from './activityInterpretationService.js';
 
 export const ACTIVITY_BASELINE_VERSION = 'activity_baseline_v1';
 export const ACTIVITY_BASELINE_METRIC = 'score_avg';
@@ -413,7 +414,13 @@ const activityBaselineService = {
         .eq('animal_id', animalId)
         .maybeSingle();
       if (error) throw error;
-      return res.json({ animal_id: animalId, activity_baseline: data ?? null });
+      return res.json({
+        animal_id: animalId,
+        activity_baseline: data ?? null,
+        activity_interpretation: interpretActivity({
+          baseline: data ? { ...data, animal_id: animalId } : null,
+        }),
+      });
     } catch (error) {
       console.error('[GET] Activity baseline failed', { animalId, error: error?.message ?? String(error) });
       return res.status(500).json({ error: 'activity_baseline_lookup_failed' });

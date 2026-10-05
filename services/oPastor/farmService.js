@@ -1,4 +1,6 @@
 import { opastorDb as supabase, getOpastorServiceDb } from "../../config/supabase.js";
+import { interpretActivity } from './activityInterpretationService.js';
+import { correlateHerdActivity } from './herdActivityCorrelationService.js';
 
 // Status derivation thresholds. Keep these conservative: they are API-side
 // presentation hints, not persisted animal health diagnoses.
@@ -355,7 +357,7 @@ export async function getOverview(
           ),
         protectedDb
           .from("latest_animal_activity_baseline")
-          .select("animal_id,version,status,assessment,metric,current_score_avg,expected_score_avg,deviation_percent,robust_z,duration_minutes,anomaly_since,sample_days,sample_count,confidence,data_quality,time_bucket,timezone,observed_at"),
+          .select("animal_id,farm_id,version,status,assessment,candidate_assessment,consecutive_recovery_windows,metric,current_score_avg,expected_score_avg,deviation_percent,robust_z,duration_minutes,anomaly_since,sample_days,sample_count,confidence,data_quality,time_bucket,timezone,observed_at"),
         publicDb
           .from("base_status")
           .select("base_id,status_type,status_data,created_at")
@@ -397,6 +399,9 @@ export async function getOverview(
       const baselineByAnimalId = new Map(
         (latestBaselineResult.data || []).map((row) => [row.animal_id, row]),
       );
+      const herdActivity = correlateHerdActivity(latestBaselineResult.data || [], {
+        evaluatedAt: new Date(),
+      });
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
       const assignmentByNodeId = new Map(
         (assignmentsResult.data || []).map((assignment) => [
@@ -416,12 +421,15 @@ export async function getOverview(
         );
         const { last_lat, last_lng } = resolveLastPosition(latestEvent);
         const assignment = assignmentByNodeId.get(node.id) || null;
+        const animalId = assignment?.animal_id ?? latestEvent?.animal_id ?? null;
+        const baseline = animalId ? baselineByAnimalId.get(animalId) || null : null;
+        const behavior = behaviorByNodeId.get(node.id) || null;
 
         return {
           // `id` remains the legacy node identifier for existing clients.
           id: node.id,
           node_id: node.id,
-          animal_id: assignment?.animal_id ?? latestEvent?.animal_id ?? null,
+          animal_id: animalId,
           farm_id: assignment?.farm_id ?? null,
           assignment: assignment
             ? {
@@ -436,10 +444,13 @@ export async function getOverview(
           status: node.status,
           created_at: node.created_at,
           latest_event: latestEvent,
-          behavior: behaviorByNodeId.get(node.id) || null,
-          activity_baseline: baselineByAnimalId.get(
-            assignment?.animal_id ?? latestEvent?.animal_id ?? null,
-          ) || null,
+          behavior,
+          activity_baseline: baseline,
+          activity_interpretation: interpretActivity({
+            baseline: baseline ? { ...baseline, animal_id: animalId } : null,
+            behavior,
+            herdContext: herdActivity,
+          }),
           derived_status: deriveNodeStatus(
             latestEvent,
             recentByNodeId.get(node.id) || [],
@@ -453,6 +464,7 @@ export async function getOverview(
       res.json({
         nodes,
         bases: latestByBaseId(baseStatusResult.data),
+        herd_activity: herdActivity.status === 'active' ? herdActivity : null,
       });
     } catch (err) {
       console.error("[GET] Farm overview failed:", err.message);

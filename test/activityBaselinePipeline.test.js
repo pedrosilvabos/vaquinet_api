@@ -145,6 +145,8 @@ test('farm overview keeps animals and returns 200 when no baseline row exists', 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.nodes.length, 1);
   assert.equal(res.body.nodes[0].activity_baseline, null);
+  assert.equal(res.body.nodes[0].activity_interpretation.state, 'unavailable');
+  assert.equal(res.body.herd_activity, null);
 });
 
 test('farm overview preserves operational failure when baseline lookup errors', async () => {
@@ -158,6 +160,31 @@ test('farm overview preserves operational failure when baseline lookup errors', 
   assert.match(res.body.details, /baseline permission failed/);
 });
 
+test('farm overview exposes semantic activity interpretation alongside the raw baseline', async () => {
+  const res = response();
+  await getOverview({}, res, {
+    publicDb: overviewDb(),
+    privilegedDb: overviewDb({
+      baseline: [{
+        animal_id: 'animal-1',
+        farm_id: 'farm-1',
+        status: 'learning',
+        assessment: 'insufficient_data',
+        candidate_assessment: null,
+        data_quality: 'ok',
+        time_bucket: '12:00-14:00',
+        timezone: 'Atlantic/Azores',
+        observed_at: '2026-10-05T12:00:00Z',
+      }],
+    }),
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.nodes[0].activity_baseline.status, 'learning');
+  assert.equal(res.body.nodes[0].activity_interpretation.state, 'learning');
+  assert.equal(res.body.nodes[0].activity_interpretation.action, 'none');
+});
+
 test('dedicated baseline endpoint returns a valid empty state', async () => {
   const res = response();
   await activityBaselineService.getAnimalBaseline(
@@ -167,5 +194,7 @@ test('dedicated baseline endpoint returns a valid empty state', async () => {
   );
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, { animal_id: 'animal-1', activity_baseline: null });
+  assert.equal(res.body.animal_id, 'animal-1');
+  assert.equal(res.body.activity_baseline, null);
+  assert.equal(res.body.activity_interpretation.state, 'unavailable');
 });
