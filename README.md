@@ -102,9 +102,10 @@ SUPABASE_OPASTOR_SERVICE_ROLE_KEY
 ```
 
 `SUPABASE_OPASTOR_KEY` is the normal application client key.
-`SUPABASE_OPASTOR_SERVICE_ROLE_KEY` is server-only and is used only by the
-trusted collar-registry service client. It must never be shipped to a Base or
-Flutter app. The Base/API bearer token is a separate authentication layer.
+`SUPABASE_OPASTOR_SERVICE_ROLE_KEY` is server-only and is used by trusted
+server-side collar-registry, canonical identity, and activity-baseline paths.
+It must never be shipped to a Base or Flutter app. The Base/API bearer token
+is a separate authentication layer.
 
 ## Base collar registry
 
