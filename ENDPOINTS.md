@@ -450,3 +450,40 @@ This route exists for compatibility. Check `routes/trails/` before extending it;
 - Treat Phase 1 behavior outputs as calibration/analysis only, not animal-health diagnosis.
 - Prefer adding fields over breaking existing response shape.
 - Keep writes behind bearer auth.
+
+## Activity baseline and field-transition endpoints
+
+These routes are mounted by `index.js` and `routes/oPastor/index.js`:
+
+| Method | Effective path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/opastor/animals/:animalId/activity-baseline` | current route is public | Latest personal-baseline assessment plus semantic `activity_interpretation`; returns `activity_baseline: null` when no assessment exists. |
+| POST | `/opastor/farms/:farmId/field-transitions` | bearer | Records a `field_change` management event for canonical animal IDs and farm fences used as source/destination fields. The server calculates expiry. |
+
+The write-route mount chain is:
+
+```text
+index.js
+  -> app.use('/opastor', opastorRouter)
+  -> routes/oPastor/index.js
+  -> router.use('/farms', fieldTransitionRoutes)
+  -> POST /:farmId/field-transitions
+```
+
+The effective URL is exactly `POST /opastor/farms/:farmId/field-transitions`.
+It is not `/opastor/opastor/...` and is not under `/farm`.
+
+The field-transition body is:
+
+```json
+{
+  "animal_ids": ["<canonical animal id>"],
+  "from_field_id": "<farm fence id or null>",
+  "to_field_id": "<farm fence id>",
+  "started_at": "<ISO timestamp>"
+}
+```
+
+The baseline endpoint uses `maybeSingle()` on
+`public.latest_animal_activity_baseline`, so a missing baseline is a valid
+domain state. Database/query failures remain operational errors.

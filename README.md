@@ -272,3 +272,41 @@ curl http://127.0.0.1:10141/farm/overview
 - Keep write routes authenticated.
 - Keep secrets in env/local ignored files only.
 - Prefer additive response fields over breaking existing app contracts.
+
+## Current activity interpretation and field-transition context
+
+Telemetry processing can persist per-animal activity-baseline assessments
+after `behavior_features` are created. The authoritative metric is
+`behavior_features.score_avg`; the implementation uses farm-local two-hour
+time buckets, a rolling 14-day history, median/MAD robust statistics,
+persistence, and recovery. This is deterministic statistical learning, not a
+trained ML model.
+
+The app-facing routes are:
+
+```text
+GET  /opastor/animals/:animalId/activity-baseline
+POST /opastor/farms/:farmId/field-transitions
+```
+
+Field transitions reuse farm `fences` as named fields and persist
+`animal_management_events` plus `animal_management_event_animals`. The
+default transition context is 48 hours, calculated by the server. It does not
+reset or re-key the personal baseline; candidate deviations may be presented
+as `field_transition`, while persistent anomalies remain visible.
+
+## Deployment verification
+
+When a new route or migration is involved, verify the deployed revision before
+debugging the client URL:
+
+1. apply the migration to the target Supabase project;
+2. confirm required environment variables, including the server-only
+   `SUPABASE_OPASTOR_SERVICE_ROLE_KEY`, are present;
+3. verify the Render revision/health check;
+4. call the exact endpoint directly with the same auth and IDs as the app;
+5. then verify the Flutter flow.
+
+An otherwise correct local API and Flutter client can still produce a remote
+failure when a Render deployment failed and production remains on an older
+API revision.
