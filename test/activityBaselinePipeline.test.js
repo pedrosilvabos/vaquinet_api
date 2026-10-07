@@ -15,6 +15,7 @@ function query(data, error = null) {
     order() { return chain; },
     limit() { return chain; },
     is() { return chain; },
+    in() { return chain; },
     maybeSingle() { return Promise.resolve({ data, error }); },
     single() { return Promise.resolve({ data, error }); },
     then(resolve, reject) { return Promise.resolve({ data, error }).then(resolve, reject); },

@@ -4,6 +4,7 @@ import {
   getFarmTimezone,
 } from './animalIdentityService.js';
 import { interpretActivity } from './activityInterpretationService.js';
+import { getActiveFieldTransition } from './fieldTransitionContextService.js';
 
 export const ACTIVITY_BASELINE_VERSION = 'activity_baseline_v1';
 export const ACTIVITY_BASELINE_METRIC = 'score_avg';
@@ -414,11 +415,17 @@ const activityBaselineService = {
         .eq('animal_id', animalId)
         .maybeSingle();
       if (error) throw error;
+      const fieldTransition = await getActiveFieldTransition({
+        animalId,
+        observedAt: data?.observed_at ?? new Date(),
+        db: client,
+      });
       return res.json({
         animal_id: animalId,
         activity_baseline: data ?? null,
         activity_interpretation: interpretActivity({
           baseline: data ? { ...data, animal_id: animalId } : null,
+          fieldTransition,
         }),
       });
     } catch (error) {

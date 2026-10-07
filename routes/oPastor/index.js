@@ -10,6 +10,7 @@ import phonebookRoutes from './phonebookRoutes.js';
 import calibrationRoutes from './calibrationRoutes.js';
 import collarRegistryRoutes from './collarRegistryRoutes.js';
 import animalRoutes from './animalRoutes.js';
+import fieldTransitionRoutes from './fieldTransitionRoutes.js';
 
 const router = express.Router();
 
@@ -24,5 +25,6 @@ router.use('/phonebook', phonebookRoutes);
 router.use('/calibration', calibrationRoutes);
 router.use('/bases', collarRegistryRoutes);
 router.use('/animals', animalRoutes);
+router.use('/farms', fieldTransitionRoutes);
 
 export default router;

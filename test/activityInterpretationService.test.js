@@ -46,3 +46,53 @@ test('interpretation keeps movement mode and marks herd participation separately
     direction: 'above',
   });
 });
+
+test('candidate deviation is contextualized during an active field transition', () => {
+  const result = interpretActivity({
+    baseline: baseline({ assessment: 'normal', candidate_assessment: 'above_baseline' }),
+    fieldTransition: {
+      type: 'field_transition',
+      status: 'active',
+      event_id: 'move-1',
+      to_field_name: 'Lower field',
+    },
+  });
+
+  assert.equal(result.state, 'field_transition');
+  assert.equal(result.underlying_state, 'unusually_active');
+  assert.equal(result.action, 'monitor');
+  assert.equal(result.context.event_id, 'move-1');
+});
+
+test('persistent anomaly remains visible during a field transition', () => {
+  const result = interpretActivity({
+    baseline: baseline({
+      assessment: 'significantly_below_baseline',
+      candidate_assessment: 'significantly_below_baseline',
+    }),
+    fieldTransition: {
+      type: 'field_transition',
+      status: 'active',
+      event_id: 'move-1',
+    },
+  });
+
+  assert.equal(result.state, 'persistent_low_activity');
+  assert.equal(result.underlying_state, null);
+  assert.equal(result.action, 'consider_checking');
+  assert.equal(result.context.status, 'active');
+});
+
+test('learning remains authoritative during a field transition', () => {
+  const result = interpretActivity({
+    baseline: baseline({ status: 'learning', assessment: 'insufficient_data' }),
+    fieldTransition: {
+      type: 'field_transition',
+      status: 'active',
+      event_id: 'move-1',
+    },
+  });
+
+  assert.equal(result.state, 'learning');
+  assert.equal(result.action, 'none');
+});

@@ -58,8 +58,17 @@ function actionFor(state) {
   return 'none';
 }
 
-export function interpretActivity({ baseline = null, behavior = null, herdContext = null } = {}) {
-  const state = farmerStateFor(baseline);
+export function interpretActivity({
+  baseline = null,
+  behavior = null,
+  herdContext = null,
+  fieldTransition = null,
+} = {}) {
+  const underlyingState = farmerStateFor(baseline);
+  const inTransition = fieldTransition?.status === 'active';
+  const canContextualize = inTransition &&
+    ['unusually_quiet', 'unusually_active'].includes(underlyingState);
+  const state = canContextualize ? 'field_transition' : underlyingState;
   const direction = directionOf(baseline?.candidate_assessment ?? baseline?.assessment);
   const participating = Boolean(
     herdContext?.status === 'active' &&
@@ -69,11 +78,13 @@ export function interpretActivity({ baseline = null, behavior = null, herdContex
   return {
     version: ACTIVITY_INTERPRETATION_VERSION,
     state,
-    action: actionFor(state),
+    action: canContextualize ? 'monitor' : actionFor(underlyingState),
+    underlying_state: state === underlyingState ? null : underlyingState,
     direction,
     movement_mode: behavior?.movement_mode ?? null,
     time_bucket: baseline?.time_bucket ?? null,
     timezone: baseline?.timezone ?? null,
+    context: inTransition ? fieldTransition : null,
     herd_context: participating
       ? {
           status: 'participating',

@@ -1,6 +1,7 @@
 import { opastorDb as supabase, getOpastorServiceDb } from "../../config/supabase.js";
 import { interpretActivity } from './activityInterpretationService.js';
 import { correlateHerdActivity } from './herdActivityCorrelationService.js';
+import { getActiveFieldTransitionsForAnimals } from './fieldTransitionContextService.js';
 
 // Status derivation thresholds. Keep these conservative: they are API-side
 // presentation hints, not persisted animal health diagnoses.
@@ -402,6 +403,11 @@ export async function getOverview(
       const herdActivity = correlateHerdActivity(latestBaselineResult.data || [], {
         evaluatedAt: new Date(),
       });
+      const fieldTransitionByAnimal = await getActiveFieldTransitionsForAnimals({
+        animalIds: (assignmentsResult.data || []).map((assignment) => assignment.animal_id),
+        observedAt: new Date(),
+        db: protectedDb,
+      });
       const recentByNodeId = groupEventsByNodeId(recentEventsResult.data);
       const assignmentByNodeId = new Map(
         (assignmentsResult.data || []).map((assignment) => [
@@ -450,6 +456,7 @@ export async function getOverview(
             baseline: baseline ? { ...baseline, animal_id: animalId } : null,
             behavior,
             herdContext: herdActivity,
+            fieldTransition: animalId ? fieldTransitionByAnimal.get(animalId) ?? null : null,
           }),
           derived_status: deriveNodeStatus(
             latestEvent,
