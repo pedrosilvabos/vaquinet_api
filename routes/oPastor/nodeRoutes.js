@@ -5,6 +5,7 @@ import coverageService from "../../services/oPastor/coverageService.js";
 import areaStatusService from "../../services/oPastor/areaStatusService.js";
 import gpsConfigService from "../../services/oPastor/gpsConfigService.js";
 import { batchTelemetry } from "../../services/oPastor/telemetryService.js";
+import { telemetryV1 } from "../../services/oPastor/telemetryV1Service.js";
 import { requireBearerToken } from "../../middleware/auth.js";
 import animalIdentityService from "../../services/oPastor/animalIdentityService.js";
 
@@ -77,5 +78,6 @@ router.post("/", requireBearerToken, nodeService.createNode);
 router.post("/batch", requireBearerToken, nodeService.batchInsertNodes);
 router.post("/sensors", requireBearerToken, nodeService.processSensorData);
 router.post("/telemetry/batch", requireBearerToken, batchTelemetry);
+router.post("/telemetry/v1", requireBearerToken, telemetryV1);
 
 export default router;
